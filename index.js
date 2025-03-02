@@ -8,12 +8,12 @@ const app = express()
 
 dotenv.config();
 
-const port=process.env.PORT;
+const port=process.env.PORT||3000;
 
 await connectDB();
-
+app.use(express.json());
 app.use(cors());
-app.use(express.json())
+
 app.use('/user',userRouter);
 app.use('/product',productRouter)
 
