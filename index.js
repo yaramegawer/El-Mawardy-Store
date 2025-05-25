@@ -12,7 +12,7 @@ const port=process.env.PORT||3000;
 
 await connectDB();
 app.use(express.json());
-app.use(cors({ origin: "https://el-mawardy-store-admin-dashboard.vercel.app", ));
+app.use(cors({ origin: "https://el-mawardy-store-admin-dashboard.vercel.app"} ));
 
 app.use('/user',userRouter);
 app.use('/product',productRouter)
