@@ -4,6 +4,7 @@ import cors from 'cors';
 import { connectDB } from './DB/connection.js';
 import userRouter from './src/modules/user/userRouter.js';
 import productRouter from './src/modules/products/productRouter.js';
+import orderRouter from './src/modules/order/orderRouter.js';
 const app = express()
 
 dotenv.config();
@@ -16,6 +17,7 @@ app.use(cors());
 
 app.use('/user',userRouter);
 app.use('/product',productRouter)
+app.use('/order',orderRouter)
 
 
 app.use('*', (req, res,next) =>{

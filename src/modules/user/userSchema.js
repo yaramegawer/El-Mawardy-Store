@@ -5,6 +5,7 @@ export const signup=joi.object({
     email:joi.string().required(),
     password:joi.string().regex(/^(?=.*[A-Z])[A-Za-z\d]{8,}$/).required(),
     confirmPassword:joi.string().valid(joi.ref("password")).required(),
+    role: joi.string().valid("user", "admin").default("user")
 }).required();
 
 export const login=joi.object({

@@ -5,6 +5,11 @@ const userSchema=new Schema({
     email:{type:String,required:true,unique:true},
     password:{type:String,required:true},
     forgetCode:{type:String,length:5},
+    role: {
+    type: String,
+    enum: ["user", "admin"],
+    default: "user"
+    }
 },{timestamps:true});
 
 export const User=model("User",userSchema);
