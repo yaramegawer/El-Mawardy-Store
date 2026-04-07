@@ -33,6 +33,8 @@ app.use((error,req,res,next)=>{
     });
 });
 
+//vercel
+// This error appears because Vercel is not meant to host a standard app.listen(...) Express server directly. You need to convert it into a serverless function or host the backend somewhere else (Heroku, Render, Railway, etc.).
 app.listen(port,()=>{
     console.log(`server is running on port ${port}`);
 });
