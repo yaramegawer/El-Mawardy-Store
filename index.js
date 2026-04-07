@@ -33,4 +33,6 @@ app.use((error,req,res,next)=>{
     });
 });
 
-app.listen(port, () => console.log(`App listening at http://localhost:${port}`))
+app.listen(port,()=>{
+    console.log(`server is running on port ${port}`);
+});
