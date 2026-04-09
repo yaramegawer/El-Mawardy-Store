@@ -13,9 +13,12 @@ router.post('/',/*isAdmin,*/fileUpload().fields([
 ]),validation(productSchema.createProduct),productController.createProduct);
 
 router.get('/',productController.allProducts);
+
+router.get('/search',productController.searchByCode);
 router.get('/:id',productController.getProductById);
 
 router.delete('/:id',isAuthenticated,isAdmin,productController.deleteProduct)
 
-router.put('/:id',isAuthenticated,isAdmin,productController.updateProduct);
+
+router.put('/:id',isAuthenticated,validation(productSchema.updateProduct),isAdmin,productController.updateProduct);
 export default router;

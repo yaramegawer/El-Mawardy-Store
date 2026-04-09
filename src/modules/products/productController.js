@@ -94,15 +94,20 @@ export const deleteProduct=asyncHandler(async(req,res,next)=>{
 
 export const updateProduct = asyncHandler(async (req, res, next) => {
 
-    const {name,price,description,stock,category,season,color,size}=req.body;
+    const {name,price,discount,buyPrice,description,stock,category,season,color,size}=req.body;
     // Check if the product exists
     const product = await Product.findById(req.params.id);
     if (!product) {
         next(new Error("Product not found", { cause: 404 }));
         return;
     }
+    //qpply discount if provided
+    if(discount){
+        const discountAmount=(price*req.body.discount)/100;
+        price=price-discountAmount;
+    }
 
-    const updatedProduct=await Product.findByIdAndUpdate(req.params.id,{name,price,description,stock,category,season,color,size})
+    const updatedProduct=await Product.findByIdAndUpdate(req.params.id,{name,price,buyPrice,description,stock,category,season,color,size,discount},{new:true})
 
     return res.json({
         success: true,
@@ -110,3 +115,16 @@ export const updateProduct = asyncHandler(async (req, res, next) => {
         product: updatedProduct
     });
 });
+
+//search by code
+export const searchByCode=asyncHandler(async(req,res,next)=>{
+    const {code}=req.query;
+    if(!code) return next(new Error("code is required",{cause:400}));
+    const product=await Product.findOne({code});
+    if(!product) return next(new Error("Product not found",{cause:404}));
+    return res.json({
+        success:true,
+        product
+    })
+});
+
