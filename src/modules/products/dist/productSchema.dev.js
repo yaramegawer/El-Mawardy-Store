@@ -19,7 +19,7 @@ var createProduct = _joi["default"].object({
   quantity: _joi["default"].number()["default"](1),
   color: _joi["default"].array().items(_joi["default"].string().required()).required(),
   size: _joi["default"].array().items(_joi["default"].string().required()).required(),
-  description: _joi["default"].string().optional(),
+  description: _joi["default"].string()["default"](" "),
   stock: _joi["default"].number()["default"](0),
   category: _joi["default"].string().required(),
   season: _joi["default"].string().required()

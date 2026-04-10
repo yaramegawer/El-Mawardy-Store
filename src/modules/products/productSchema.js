@@ -9,7 +9,7 @@ export const createProduct=joi.object({
     quantity:joi.number().default(1),
     color:joi.array().items(joi.string().required()).required(),
     size:joi.array().items(joi.string().required()).required(),
-    description:joi.string().optional(),
+    description:joi.string().default(" "),
     stock:joi.number().default(0),
     category:joi.string().required(),
     season:joi.string().required(),
