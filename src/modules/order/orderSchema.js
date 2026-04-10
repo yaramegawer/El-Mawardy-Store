@@ -30,6 +30,7 @@ export const updateOrderStatus = joi.object({
   status: joi.string()
     .valid("pending", "confirmed", "shipped", "delivered", "cancelled")
     .required(),
+    notes:joi.string(),
 });
 
 export const confirmDeposit = joi.object({

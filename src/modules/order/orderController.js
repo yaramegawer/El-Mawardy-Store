@@ -285,7 +285,7 @@ export const getFinanceAnalytics = asyncHandler(async (req, res, next) => {
 
 
 export const updateOrderStatus = asyncHandler(async (req, res, next) => {
-  const { status } = req.body;
+  const { status,notes } = req.body;
   const order = await Order.findById(req.params.id);
   if (!order) return next(new Error("Order not found!", { cause: 404 }));
 
@@ -304,6 +304,7 @@ export const updateOrderStatus = asyncHandler(async (req, res, next) => {
   }
 
   order.status = status;
+  order.notes=notes;
   await order.save();
 
   res.json({ success: true, message: "Order status updated successfully", data: order });
