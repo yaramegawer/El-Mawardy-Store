@@ -213,7 +213,7 @@ export const getFinanceAnalytics = asyncHandler(async (req, res, next) => {
 
       // Add returns and deposits
       acc.totalReturns += order.returnAmount || 0;
-      if (order.depositConfirmed) {
+      if (order.depositConfirmed && order.source !== "store") {
         acc.totalDeposits += order.depositAmount || 0;
       }
 
