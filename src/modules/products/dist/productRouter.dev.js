@@ -36,6 +36,6 @@ router.get('/', productController.allProducts);
 router.get('/search', productController.searchByCode);
 router.get('/:id', productController.getProductById);
 router["delete"]('/:id', productController.deleteProduct);
-router.put('/:id', (0, _validationMiddleware.validation)(productSchema.updateProduct), _isAdmin.isAdmin, productController.updateProduct);
+router.put('/:id', (0, _validationMiddleware.validation)(productSchema.updateProduct), productController.updateProduct);
 var _default = router;
 exports["default"] = _default;

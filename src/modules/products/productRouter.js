@@ -20,5 +20,5 @@ router.get('/:id',productController.getProductById);
 router.delete('/:id',productController.deleteProduct)
 
 
-router.put('/:id',validation(productSchema.updateProduct),isAdmin,productController.updateProduct);
+router.put('/:id',validation(productSchema.updateProduct),productController.updateProduct);
 export default router;
