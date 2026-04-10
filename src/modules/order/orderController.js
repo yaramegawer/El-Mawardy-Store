@@ -163,73 +163,64 @@ export const getOrderById = asyncHandler(async (req, res, next) => {
 
 export const getFinanceAnalytics = asyncHandler(async (req, res, next) => {
   const { startDate, endDate } = req.query;
-
-  // FIX: removed the blanket `depositConfirmed: true` filter.
-  // Finance analytics should cover all confirmed/shipped/delivered orders so the
-  // dashboard reflects reality. Adjust the filter below to match your business rules.
+  // FIX: Include all orders (pending included) so we can catch all Deposits and Returns.
+  // We remove `isReturned: { $ne: true }` so the database doesn't silently hide returned orders.
   const filter = {
-    status: { $in: ["confirmed", "shipped", "delivered"] },
-    isReturned: { $ne: true }, // exclude fully returned orders from revenue/profit
+    status: { $in: ["pending", "confirmed", "shipped", "delivered"] }
   };
-
   if (startDate || endDate) {
     filter.orderDate = {};
     if (startDate) filter.orderDate.$gte = new Date(startDate);
     if (endDate) filter.orderDate.$lte = new Date(endDate);
   }
-
   const orders = await Order.find(filter).populate("products.productId", "name");
-
   const summary = orders.reduce(
     (acc, order) => {
-      // FIX: use stored totalCost; fall back to per-item calculation only if missing
+      // 1. ADD RETURNS & DEPOSITS (We do this for ALL orders)
+      acc.totalReturns += order.returnAmount || 0;
+      
+      if (order.depositConfirmed && order.source !== "store") {
+        acc.totalDeposits += order.depositAmount || 0;
+      }
+      // 2. BLOCK PENDING OR FULLY RETURNED ORDERS FROM REVENUE
+      // We gathered their deposits/returns above, but we stop here so they don't break our profit margins!
+      if (order.isReturned || order.status === "pending") {
+         return acc;
+      }
+      // 3. REVENUE & PROFIT LOGIC (Only runs for active, unreturned orders)
       const orderCost =
         order.totalCost != null
           ? order.totalCost
           : order.products.reduce((sum, item) => sum + (item.costPrice || 0) * item.quantity, 0);
-
-      // FIX: use stored profit; it is now (itemsAfterDiscount - totalCost) — shipping excluded
       const orderProfit =
         order.profit != null
           ? order.profit
           : order.totalPrice - order.shippingCost - order.totalDiscount - orderCost;
-
       const orderItems =
         order.itemsCount != null
           ? order.itemsCount
           : order.products.reduce((sum, item) => sum + item.quantity, 0);
-
       const totalDiscount = order.totalDiscount || 0;
-
       acc.totalOrders += 1;
-      // FIX: net revenue = totalPrice (includes shipping, after discount).
-      // If you want item-only revenue, use (order.itemsPrice - order.totalDiscount).
       acc.totalRevenue += order.totalPrice || 0;
       acc.totalShipping += order.shippingCost || 0;
       acc.totalDiscount += totalDiscount;
       acc.totalCost += orderCost;
       acc.totalProfit += orderProfit;
       acc.totalItemsSold += orderItems;
-
-      // Add returns and deposits
-      acc.totalReturns += order.returnAmount || 0;
-      if (order.depositConfirmed && order.source !== "store") {
-        acc.totalDeposits += order.depositAmount || 0;
-      }
-
+      // 4. PRODUCT BREAKDOWN MATH
       order.products.forEach((item) => {
         const id = item.productId?._id?.toString() || item.productId.toString();
         const name = item.productId?.name || "Unknown product";
         const itemCost = item.costPrice || 0;
         const itemDiscountAmount = item.discountAmount || 0;
         const itemOriginalRevenue = item.price || 0;
-        // FIX: finalPrice is now reliably stored; fall back gracefully for old records
+        
         const itemFinalRevenue =
           item.finalPrice != null
             ? item.finalPrice
             : itemOriginalRevenue - itemDiscountAmount;
         const itemProfit = itemFinalRevenue - itemCost;
-
         if (!acc.products[id]) {
           acc.products[id] = {
             productId: id,
@@ -242,7 +233,6 @@ export const getFinanceAnalytics = asyncHandler(async (req, res, next) => {
             profit: 0,
           };
         }
-
         acc.products[id].quantitySold += item.quantity;
         acc.products[id].originalRevenue += item.quantity * itemOriginalRevenue;
         acc.products[id].discount += item.quantity * itemDiscountAmount;
@@ -250,7 +240,6 @@ export const getFinanceAnalytics = asyncHandler(async (req, res, next) => {
         acc.products[id].cost += item.quantity * itemCost;
         acc.products[id].profit += item.quantity * itemProfit;
       });
-
       return acc;
     },
     {
@@ -266,9 +255,7 @@ export const getFinanceAnalytics = asyncHandler(async (req, res, next) => {
       products: {},
     }
   );
-
   const productBreakdown = Object.values(summary.products).sort((a, b) => b.revenue - a.revenue);
-
   res.json({
     success: true,
     message: "Finance analytics retrieved successfully",
@@ -284,8 +271,6 @@ export const getFinanceAnalytics = asyncHandler(async (req, res, next) => {
       totalDeposits: summary.totalDeposits,
       depositPercentage: summary.totalRevenue ? (summary.totalDeposits / summary.totalRevenue) * 100 : 0,
       averageOrderValue: summary.totalOrders ? summary.totalRevenue / summary.totalOrders : 0,
-      // FIX: profit per item should use totalProfit (which excludes shipping),
-      // not totalRevenue, so the number represents true item-level margin
       averageProfitPerItem: summary.totalItemsSold
         ? summary.totalProfit / summary.totalItemsSold
         : 0,
