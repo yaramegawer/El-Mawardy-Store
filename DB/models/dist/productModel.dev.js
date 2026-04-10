@@ -1,0 +1,91 @@
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.Product = void 0;
+
+var _mongoose = require("mongoose");
+
+var productSchema = new _mongoose.Schema({
+  code: {
+    type: String,
+    unique: true,
+    required: true
+  },
+  name: {
+    type: String,
+    max: 50,
+    required: true
+  },
+  price: {
+    type: Number,
+    required: true
+  },
+  buyPrice: {
+    type: Number,
+    required: true
+  },
+  quantity: {
+    type: Number,
+    "default": 1
+  },
+  color: [{
+    type: String,
+    required: true
+  }],
+  size: [{
+    type: String,
+    required: true
+  }],
+  description: {
+    type: String,
+    "default": " "
+  },
+  images: [{
+    id: {
+      type: String,
+      required: true
+    },
+    url: {
+      type: String,
+      required: true
+    }
+  }],
+  defaultImage: {
+    id: {
+      type: String,
+      required: true
+    },
+    url: {
+      type: String,
+      required: true
+    }
+  },
+  cloudFolder: {
+    type: String,
+    unique: true,
+    required: true
+  },
+  category: {
+    type: String,
+    required: true
+  },
+  season: {
+    type: String,
+    required: true
+  },
+  stock: {
+    type: Number,
+    "default": 0
+  },
+  discount: {
+    type: Number,
+    "default": 0
+  } // percentage discount (e.g., 20 for 20% off) 
+
+}, {
+  timestamps: true
+});
+var Product = (0, _mongoose.model)('Product', productSchema);
+exports.Product = Product;

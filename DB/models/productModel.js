@@ -32,7 +32,7 @@ const productSchema=new Schema({
         required:true
        } ]
     ,
-    description:String,
+    description:{type:String,default:" "},
     images:[{
         id:{type:String,required:true},
         url:{type:String,required:true},
