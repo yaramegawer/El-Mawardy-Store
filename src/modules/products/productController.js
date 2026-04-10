@@ -109,7 +109,7 @@ export const deleteProduct=asyncHandler(async(req,res,next)=>{
 
 export const updateProduct = asyncHandler(async (req, res, next) => {
 
-    const {name,price,discount,buyPrice,description,stock,category,season,color,size}=req.body;
+    let {name,price,discount,buyPrice,description,stock,category,season,color,size}=req.body;
     // Check if the product exists
     const product = await Product.findById(req.params.id);
     if (!product) {
