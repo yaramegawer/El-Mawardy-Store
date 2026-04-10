@@ -3,29 +3,44 @@ import { nanoid } from "nanoid";
 import { Product } from './../../../DB/models/productModel.js';
 import cloudinary from './../../utils/cloudinary.js';
 
-export const createProduct=asyncHandler(async(req,res,next)=>{
-    if(!req.files) return next(new Error("product images are required",{cause:400}));
-    const cloudFolder=nanoid();
-    let images=[]
-    //upload sub images
-    for(const file of req.files.subImage){
-        const {secure_url,public_id}=await cloudinary.uploader.upload(file.path,{folder:`${process.env.CLOUD_FOLDER_NAME}/products/${cloudFolder}`});
-        images.push({id:public_id,url:secure_url});
-    }
-
-    //upload default image
-    const {secure_url,public_id}=await cloudinary.uploader.upload(req.files.defaultImage[0].path,{folder:`${process.env.CLOUD_FOLDER_NAME}/products/${cloudFolder}`});
-
-    //create product
-    const product=await Product.create({...req.body,cloudFolder,/*createdBy:req.user._id,*/defaultImage:{url:secure_url,id:public_id},images});
-
-    //send response
+export const createProduct = asyncHandler(async (req, res, next) => {
+    if (!req.files) return next(new Error("product images are required", { cause: 400 }));
+    
+    const cloudFolder = nanoid();
+    const cloudFolderStr = `${process.env.CLOUD_FOLDER_NAME}/products/${cloudFolder}`;
+    
+    // 1. Fire off all uploads concurrently
+    const subImageUploads = (req.files.subImage || []).map(file => 
+      cloudinary.uploader.upload(file.path, { folder: cloudFolderStr })
+    );
+    const defaultImageUpload = cloudinary.uploader.upload(req.files.defaultImage[0].path, { folder: cloudFolderStr });
+    
+    // 2. Wait for all of them to finish at the exact same time
+    const results = await Promise.all([...subImageUploads, defaultImageUpload]);
+    
+    // 3. Extract the default image (which is the last one in the array)
+    const defaultResult = results.pop();
+    
+    // 4. Map the remaining results (all the subImages) into the format MongoDB expects
+    const subImagesArray = results.map(res => ({ id: res.public_id, url: res.secure_url }));
+    
+    // 5. Create product in DB
+    const product = await Product.create({
+        ...req.body,
+        cloudFolder,
+        /* createdBy: req.user._id, */
+        defaultImage: { 
+            url: defaultResult.secure_url, 
+            id: defaultResult.public_id 
+        },
+        images: subImagesArray
+    });
+    // 6. Send response
     return res.json({
-        success:true,
-        message:"product created successfully"
-    })
+        success: true,
+        message: "product created successfully"
+    });
 });
-
 
 export const allProducts=asyncHandler(async(req,res,next)=>{
     let page = parseInt(req.query.page) || 1; // Ensure page is a valid number
