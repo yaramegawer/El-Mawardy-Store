@@ -166,7 +166,7 @@ export const getFinanceAnalytics = asyncHandler(async (req, res, next) => {
   // FIX: Include all orders (pending included) so we can catch all Deposits and Returns.
   // We remove `isReturned: { $ne: true }` so the database doesn't silently hide returned orders.
   const filter = {
-    status: { $in: ["pending", "confirmed", "shipped", "delivered"] }
+    status: { $in: [ "confirmed", "shipped", "delivered"] }
   };
   if (startDate || endDate) {
     filter.orderDate = {};
