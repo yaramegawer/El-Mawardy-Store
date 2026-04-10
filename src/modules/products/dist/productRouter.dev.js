@@ -38,6 +38,6 @@ router.get('/', productController.allProducts);
 router.get('/search', productController.searchByCode);
 router.get('/:id', productController.getProductById);
 router["delete"]('/:id', _authenticationMiddleware.isAuthenticated, _isAdmin.isAdmin, productController.deleteProduct);
-router.put('/:id', _authenticationMiddleware.isAuthenticated, (0, _validationMiddleware.validation)(productSchema.updateProduct), _isAdmin.isAdmin, productController.updateProduct);
+router.put('/:id', _authenticationMiddleware.isAuthenticated, _isAdmin.isAdmin, (0, _validationMiddleware.validation)(productSchema.updateProduct), _isAdmin.isAdmin, productController.updateProduct);
 var _default = router;
 exports["default"] = _default;
