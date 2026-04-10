@@ -7,7 +7,7 @@ import { validation } from "../../middlewares/validationMiddleware.js";
 import { isAdmin } from "../../middlewares/isAdmin.js";
 const router=Router();
 
-router.post('/',/*isAdmin,*/fileUpload().fields([
+router.post('/',fileUpload().fields([
     {name:"defaultImage",maxCount:1},
     {name:"subImage"},
 ]),validation(productSchema.createProduct),productController.createProduct);
@@ -17,8 +17,8 @@ router.get('/',productController.allProducts);
 router.get('/search',productController.searchByCode);
 router.get('/:id',productController.getProductById);
 
-router.delete('/:id',isAuthenticated,isAdmin,productController.deleteProduct)
+router.delete('/:id',productController.deleteProduct)
 
 
-router.put('/:id',isAuthenticated,isAdmin,validation(productSchema.updateProduct),isAdmin,productController.updateProduct);
+router.put('/:id',validation(productSchema.updateProduct),isAdmin,productController.updateProduct);
 export default router;
