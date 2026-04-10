@@ -211,6 +211,12 @@ export const getFinanceAnalytics = asyncHandler(async (req, res, next) => {
       acc.totalProfit += orderProfit;
       acc.totalItemsSold += orderItems;
 
+      // Add returns and deposits
+      acc.totalReturns += order.returnAmount || 0;
+      if (order.depositConfirmed) {
+        acc.totalDeposits += order.depositAmount || 0;
+      }
+
       order.products.forEach((item) => {
         const id = item.productId?._id?.toString() || item.productId.toString();
         const name = item.productId?.name || "Unknown product";
@@ -255,6 +261,8 @@ export const getFinanceAnalytics = asyncHandler(async (req, res, next) => {
       totalCost: 0,
       totalProfit: 0,
       totalItemsSold: 0,
+      totalReturns: 0,
+      totalDeposits: 0,
       products: {},
     }
   );
@@ -272,6 +280,9 @@ export const getFinanceAnalytics = asyncHandler(async (req, res, next) => {
       totalCost: summary.totalCost,
       totalProfit: summary.totalProfit,
       totalItemsSold: summary.totalItemsSold,
+      totalReturns: summary.totalReturns,
+      totalDeposits: summary.totalDeposits,
+      depositPercentage: summary.totalRevenue ? (summary.totalDeposits / summary.totalRevenue) * 100 : 0,
       averageOrderValue: summary.totalOrders ? summary.totalRevenue / summary.totalOrders : 0,
       // FIX: profit per item should use totalProfit (which excludes shipping),
       // not totalRevenue, so the number represents true item-level margin
