@@ -432,6 +432,13 @@ export const exchangeOrderProducts = asyncHandler(async (req, res, next) => {
   const order = await Order.findById(req.params.id);
   if (!order) return next(new Error("Order not found!", { cause: 404 }));
 
+  if(order.isExchanged){
+     return next(
+      new Error("Cannot exchange order already been exchanged before", {
+        cause: 403,
+      })
+    );
+  }
   if (!order.depositConfirmed) {
     return next(
       new Error("Cannot exchange products on an order whose deposit has not been confirmed", {
@@ -451,6 +458,8 @@ export const exchangeOrderProducts = asyncHandler(async (req, res, next) => {
     // hydrated the DocumentArray (e.g. lean queries, certain schema configs, or
     // version mismatches). A manual .find() with toString() on both sides is
     // always reliable regardless of how the array was loaded.
+
+    
     const originalProduct = order.products.find(
       (p) => p._id && p._id.toString() === originalLineItemId.toString()
     );
