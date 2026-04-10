@@ -9,7 +9,7 @@ const router=Router();
 
 router.post('/',/*isAdmin,*/fileUpload().fields([
     {name:"defaultImage",maxCount:1},
-    {name:"subImage",maxCount:3},
+    {name:"subImage"},
 ]),validation(productSchema.createProduct),productController.createProduct);
 
 router.get('/',productController.allProducts);
