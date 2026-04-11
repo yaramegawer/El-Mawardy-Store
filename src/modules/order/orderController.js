@@ -74,7 +74,7 @@ export const createOrder = asyncHandler(async (req, res, next) => {
   // - RealizedProfit = final profit recorded only when status becomes "delivered"
   const estimatedProfit = itemsPrice - totalCost;
 
-  const depositAmount = totalPrice * 0.5;
+  const depositAmount = itemsPrice * 0.5;
   const dueAmount = totalPrice - depositAmount;
 
   const order = await Order.create({
