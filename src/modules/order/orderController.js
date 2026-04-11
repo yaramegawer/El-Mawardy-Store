@@ -196,40 +196,38 @@ export const getFinanceAnalytics = asyncHandler(async (req, res, next) => {
       }
       
       // 2. TRACK CANCELLED PROFIT ADJUSTMENTS
-      // When an order is cancelled, realizedProfit is set to negative of estimatedProfit to record the loss
       if (order.status === "cancelled") {
-        acc.totalCancelledProfit += Math.abs(order.realizedProfit || 0); // Track lost profit
+        acc.totalCancelledProfit += Math.abs(order.realizedProfit || order.estimatedProfit || 0); // Track lost profit
         return acc; // Skip revenue calculations for cancelled orders
       }
       
       // 3. BLOCK PENDING OR FULLY RETURNED ORDERS FROM REVENUE
-      // We gathered their deposits/returns above, but we stop here so they don't break our profit margins!
       if (order.isReturned || order.status === "pending") {
          return acc;
       }
       
-      // Only count orders that have been delivered (realized profit) or shipped (in-transit, likely to complete)
-      if (order.status !== "shipped" && order.status !== "delivered") {
+      // Allow confirmed, shipped, and delivered.
+      if (order.status !== "confirmed" && order.status !== "shipped" && order.status !== "delivered") {
          return acc;
       }
+      
       // 4. REVENUE & PROFIT LOGIC (Only runs for active, unreturned, non-cancelled orders)
       const orderCost =
         order.totalCost != null
           ? order.totalCost
           : order.products.reduce((sum, item) => sum + (item.costPrice || 0) * item.quantity, 0);
       
-      // Use realizedProfit for delivered orders (confirmed final profit)
-      // Use estimatedProfit for shipped orders (forecast profit)
-      // Fallback to calculation for backwards compatibility
-      let orderProfit;
-      if (order.status === "delivered" && order.realizedProfit != null) {
-        orderProfit = order.realizedProfit;
-      } else if (order.estimatedProfit != null) {
-        orderProfit = order.estimatedProfit;
-      } else {
-        // Backwards compatibility: calculate from components
-        const itemsPriceAfterDiscount = order.itemsPrice - order.totalDiscount;
-        orderProfit = itemsPriceAfterDiscount - orderCost;
+      const itemsPriceAfterDiscount = order.itemsPrice - order.totalDiscount;
+
+      // Estimated Profit
+      const estProfit = order.estimatedProfit != null ? order.estimatedProfit : (itemsPriceAfterDiscount - orderCost);
+      acc.totalEstimatedProfit += estProfit;
+
+      // Realized Profit is only locked in when delivered
+      let realProfit = 0;
+      if (order.status === "delivered") {
+        realProfit = order.realizedProfit != null ? order.realizedProfit : estProfit;
+        acc.totalRealizedProfit += realProfit;
       }
       
       const orderItems =
@@ -237,14 +235,15 @@ export const getFinanceAnalytics = asyncHandler(async (req, res, next) => {
           ? order.itemsCount
           : order.products.reduce((sum, item) => sum + item.quantity, 0);
       const totalDiscount = order.totalDiscount || 0;
+      
       acc.totalOrders += 1;
       acc.totalRevenue += order.totalPrice || 0;
       acc.totalShipping += order.shippingCost || 0;
       acc.totalDiscount += totalDiscount;
       acc.totalCost += orderCost;
-      acc.totalProfit += orderProfit;
       acc.totalItemsSold += orderItems;
-      // 4. PRODUCT BREAKDOWN MATH
+      
+      // 5. PRODUCT BREAKDOWN MATH
       order.products.forEach((item) => {
         const id = item.productId?._id?.toString() || item.productId.toString();
         const name = item.productId?.name || "Unknown product";
@@ -256,7 +255,10 @@ export const getFinanceAnalytics = asyncHandler(async (req, res, next) => {
           item.finalPrice != null
             ? item.finalPrice
             : itemOriginalRevenue - itemDiscountAmount;
-        const itemProfit = itemFinalRevenue - itemCost;
+            
+        const itemEstProfit = itemFinalRevenue - itemCost;
+        const itemRealProfit = order.status === "delivered" ? itemEstProfit : 0;
+        
         if (!acc.products[id]) {
           acc.products[id] = {
             productId: id,
@@ -266,7 +268,9 @@ export const getFinanceAnalytics = asyncHandler(async (req, res, next) => {
             discount: 0,
             revenue: 0,
             cost: 0,
-            profit: 0,
+            estimatedProfit: 0,
+            realizedProfit: 0,
+            profit: 0, // for backwards compatibility
           };
         }
         acc.products[id].quantitySold += item.quantity;
@@ -274,7 +278,9 @@ export const getFinanceAnalytics = asyncHandler(async (req, res, next) => {
         acc.products[id].discount += item.quantity * itemDiscountAmount;
         acc.products[id].revenue += item.quantity * itemFinalRevenue;
         acc.products[id].cost += item.quantity * itemCost;
-        acc.products[id].profit += item.quantity * itemProfit;
+        acc.products[id].estimatedProfit += item.quantity * itemEstProfit;
+        acc.products[id].realizedProfit += item.quantity * itemRealProfit;
+        acc.products[id].profit += item.quantity * (order.status === "delivered" ? itemRealProfit : itemEstProfit);
       });
       return acc;
     },
@@ -284,7 +290,8 @@ export const getFinanceAnalytics = asyncHandler(async (req, res, next) => {
       totalShipping: 0,
       totalDiscount: 0,
       totalCost: 0,
-      totalProfit: 0,
+      totalEstimatedProfit: 0,
+      totalRealizedProfit: 0,
       totalItemsSold: 0,
       totalReturns: 0,
       totalDeposits: 0,
@@ -292,10 +299,11 @@ export const getFinanceAnalytics = asyncHandler(async (req, res, next) => {
       products: {},
     }
   );
+  
   const productBreakdown = Object.values(summary.products).sort((a, b) => b.revenue - a.revenue);
   
-  // Calculate net profit: actual profit minus cancelled profit adjustments
-  const netProfit = summary.totalProfit - summary.totalCancelledProfit;
+  // Realized profit is the final net profit for actual performance metrics
+  const netProfit = summary.totalRealizedProfit;
   
   res.json({
     success: true,
@@ -306,16 +314,18 @@ export const getFinanceAnalytics = asyncHandler(async (req, res, next) => {
       totalShipping: summary.totalShipping,
       totalDiscount: summary.totalDiscount,
       totalCost: summary.totalCost,
-      totalProfit: summary.totalProfit, // Profit from completed orders
-      totalCancelledProfit: summary.totalCancelledProfit, // Profit lost from cancellations
-      netProfit: netProfit, // Actual realized profit after cancellations
+      totalEstimatedProfit: summary.totalEstimatedProfit,
+      totalRealizedProfit: summary.totalRealizedProfit,
+      totalProfit: summary.totalRealizedProfit, // Backwards compatibility for anything still using totalProfit
+      totalCancelledProfit: summary.totalCancelledProfit, // Track profit we missed out on
+      netProfit: netProfit, // Actual realized profit
       totalItemsSold: summary.totalItemsSold,
       totalReturns: summary.totalReturns,
       totalDeposits: summary.totalDeposits,
       depositPercentage: summary.totalRevenue ? (summary.totalDeposits / summary.totalRevenue) * 100 : 0,
       averageOrderValue: summary.totalOrders ? summary.totalRevenue / summary.totalOrders : 0,
       averageProfitPerItem: summary.totalItemsSold
-        ? summary.totalProfit / summary.totalItemsSold
+        ? summary.totalRealizedProfit / summary.totalItemsSold
         : 0,
       productBreakdown,
     },
@@ -349,10 +359,12 @@ export const updateOrderStatus = asyncHandler(async (req, res, next) => {
       }
     }
     // FINANCIAL ADJUSTMENT: Reverse profit impact when order is cancelled
-    // Set estimatedProfit to 0 (this order no longer produces expected profit)
-    // Set realizedProfit to negative of estimatedProfit to record the loss
-    order.estimatedProfit = 0;
-    order.realizedProfit = -(order.estimatedProfit || 0); // Track profit reversal as negative
+    // Keep estimatedProfit intact so we have the historical footprint, but
+    // set realizedProfit to negative of estimatedProfit to track the "missed" opportunity.
+    if (order.status !== "cancelled") {
+      const profitToReverse = order.estimatedProfit || 0;
+      order.realizedProfit = -Math.abs(profitToReverse); // Track profit reversal as negative
+    }
   }
 
   // Record realizedProfit only when order is delivered (confirmed transaction)
