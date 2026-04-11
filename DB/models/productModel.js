@@ -45,7 +45,12 @@ const productSchema=new Schema({
     category:{type:String,required:true},
     season:{type:String,required:true},
     stock:{type:Number,default:0},
-    discount:{type:Number,default:0}, // percentage discount (e.g., 20 for 20% off) 
+    discount:{type:Number,default:0},
+    discountedPrice:{
+         type:Number,
+        required:true
+    }
+    // percentage discount (e.g., 20 for 20% off) 
 },{timestamps:true});
 
 export const Product=model('Product',productSchema);

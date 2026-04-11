@@ -82,6 +82,10 @@ var productSchema = new _mongoose.Schema({
   discount: {
     type: Number,
     "default": 0
+  },
+  discountedPrice: {
+    type: Number,
+    required: true
   } // percentage discount (e.g., 20 for 20% off) 
 
 }, {

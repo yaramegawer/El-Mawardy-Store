@@ -182,34 +182,34 @@ export const getFinanceAnalytics = asyncHandler(async (req, res, next) => {
     (acc, order) => {
       // 1. ADD RETURNS & DEPOSITS (We do this for ALL orders)
       acc.totalReturns += order.returnAmount || 0;
-      
+
       // Only count deposits that are still owed (not returned/refunded)
       if (order.depositConfirmed && order.source !== "store" && order.status !== "cancelled" && order.paymentStatus !== "deposit_returned") {
         acc.totalDeposits += order.depositAmount || 0;
       }
-      
+
       // 2. TRACK CANCELLED PROFIT ADJUSTMENTS
       if (order.status === "cancelled") {
         acc.totalCancelledProfit += Math.abs(order.realizedProfit || order.estimatedProfit || 0); // Track lost profit
         return acc; // Skip revenue calculations for cancelled orders
       }
-      
+
       // 3. BLOCK PENDING OR FULLY RETURNED ORDERS FROM REVENUE
       if (order.isReturned || order.status === "pending") {
-         return acc;
+        return acc;
       }
-      
+
       // Allow confirmed, shipped, and delivered.
       if (order.status !== "confirmed" && order.status !== "shipped" && order.status !== "delivered") {
-         return acc;
+        return acc;
       }
-      
+
       // 4. REVENUE & PROFIT LOGIC (Only runs for active, unreturned, non-cancelled orders)
       const orderCost =
         order.totalCost != null
           ? order.totalCost
           : order.products.reduce((sum, item) => sum + (item.costPrice || 0) * item.quantity, 0);
-      
+
       const itemsPriceAfterDiscount = order.itemsPrice - order.totalDiscount;
 
       // Estimated Profit
@@ -222,13 +222,13 @@ export const getFinanceAnalytics = asyncHandler(async (req, res, next) => {
         realProfit = order.realizedProfit != null ? order.realizedProfit : estProfit;
         acc.totalRealizedProfit += realProfit;
       }
-      
+
       const orderItems =
         order.itemsCount != null
           ? order.itemsCount
           : order.products.reduce((sum, item) => sum + item.quantity, 0);
       const totalDiscount = order.totalDiscount || 0;
-      
+
       acc.totalOrders += 1;
       // totalRevenue = gross product revenue BEFORE discount (itemsPrice).
       // order.totalPrice already has discount subtracted + shipping added,
@@ -239,7 +239,7 @@ export const getFinanceAnalytics = asyncHandler(async (req, res, next) => {
       acc.totalDiscount += totalDiscount;
       acc.totalCost += orderCost;
       acc.totalItemsSold += orderItems;
-      
+
       // 5. PRODUCT BREAKDOWN MATH
       order.products.forEach((item) => {
         const id = item.productId?._id?.toString() || item.productId.toString();
@@ -247,15 +247,15 @@ export const getFinanceAnalytics = asyncHandler(async (req, res, next) => {
         const itemCost = item.costPrice || 0;
         const itemDiscountAmount = item.discountAmount || 0;
         const itemOriginalRevenue = item.price || 0;
-        
+
         const itemFinalRevenue =
           item.finalPrice != null
             ? item.finalPrice
             : itemOriginalRevenue - itemDiscountAmount;
-            
+
         const itemEstProfit = itemFinalRevenue - itemCost;
         const itemRealProfit = order.status === "delivered" ? itemEstProfit : 0;
-        
+
         if (!acc.products[id]) {
           acc.products[id] = {
             productId: id,
@@ -296,12 +296,12 @@ export const getFinanceAnalytics = asyncHandler(async (req, res, next) => {
       products: {},
     }
   );
-  
+
   const productBreakdown = Object.values(summary.products).sort((a, b) => b.revenue - a.revenue);
-  
+
   // Realized profit is the final net profit for actual performance metrics
   const netProfit = summary.totalRealizedProfit;
-  
+
   res.json({
     success: true,
     message: "Finance analytics retrieved successfully",
@@ -481,7 +481,7 @@ export const returnOrder = asyncHandler(async (req, res, next) => {
   order.returnReason = returnReason || "Customer return";
   order.returnDate = new Date();
   order.refundStatus = "pending";
-  
+
   // If deposit was confirmed, mark payment status as deposit_returned for tracking
   if (order.depositConfirmed && order.paymentStatus !== "deposit_returned") {
     order.paymentStatus = "deposit_returned";
@@ -518,8 +518,8 @@ export const exchangeOrderProducts = asyncHandler(async (req, res, next) => {
   const order = await Order.findById(req.params.id);
   if (!order) return next(new Error("Order not found!", { cause: 404 }));
 
-  if(order.isExchanged){
-     return next(
+  if (order.isExchanged) {
+    return next(
       new Error("Cannot exchange order already been exchanged before", {
         cause: 403,
       })
@@ -545,7 +545,7 @@ export const exchangeOrderProducts = asyncHandler(async (req, res, next) => {
     // version mismatches). A manual .find() with toString() on both sides is
     // always reliable regardless of how the array was loaded.
 
-    
+
     const originalProduct = order.products.find(
       (p) => p._id && p._id.toString() === originalLineItemId.toString()
     );
@@ -572,11 +572,11 @@ export const exchangeOrderProducts = asyncHandler(async (req, res, next) => {
     // Resolve original selling price (pre-discount) and final price (post-discount).
     // Guard against missing fields on records saved before those fields existed.
     const originalSellingPrice = originalProduct.price || 0;
-    const originalDiscountPct  = originalProduct.discountPercentage || 0;
-    const originalDiscountAmt  = originalProduct.discountAmount != null
+    const originalDiscountPct = originalProduct.discountPercentage || 0;
+    const originalDiscountAmt = originalProduct.discountAmount != null
       ? originalProduct.discountAmount
       : (originalSellingPrice * originalDiscountPct) / 100;
-    const originalFinalPrice   = originalProduct.finalPrice != null
+    const originalFinalPrice = originalProduct.finalPrice != null
       ? originalProduct.finalPrice
       : originalSellingPrice - originalDiscountAmt;
 
@@ -595,9 +595,9 @@ export const exchangeOrderProducts = asyncHandler(async (req, res, next) => {
     }
 
     const newSellingPrice = newProduct.price || 0;
-    const newDiscountPct  = newProduct.discount || 0;
-    const newDiscountAmt  = (newSellingPrice * newDiscountPct) / 100;
-    const newFinalPrice   = newSellingPrice - newDiscountAmt;
+    const newDiscountPct = newProduct.discount || 0;
+    const newDiscountAmt = (newSellingPrice * newDiscountPct) / 100;
+    const newFinalPrice = newSellingPrice - newDiscountAmt;
 
     // Price adjustment is based on finalPrice (what is actually charged),
     // not the pre-discount price — this is what flows into totalPrice / dueAmount.
@@ -610,7 +610,7 @@ export const exchangeOrderProducts = asyncHandler(async (req, res, next) => {
     // Audit log — store both the pre-discount selling price AND the final
     // (post-discount) price so the dashboard can display either.
     exchanges.push({
-      originalProductId:    originalProduct.productId,
+      originalProductId: originalProduct.productId,
       newProductId,
       quantity,
       originalSellingPrice, // pre-discount snapshot
@@ -626,16 +626,16 @@ export const exchangeOrderProducts = asyncHandler(async (req, res, next) => {
 
     if (quantity === originalProduct.quantity) {
       // Full replacement — update the line item in-place
-      originalProduct.productId         = newProductId;
-      originalProduct.price             = newSellingPrice;
+      originalProduct.productId = newProductId;
+      originalProduct.price = newSellingPrice;
       originalProduct.discountPercentage = newDiscountPct;
-      originalProduct.discountAmount    = newDiscountAmt;
-      originalProduct.finalPrice        = newFinalPrice;
-      originalProduct.costPrice         = newProduct.buyPrice || 0;
+      originalProduct.discountAmount = newDiscountAmt;
+      originalProduct.finalPrice = newFinalPrice;
+      originalProduct.costPrice = newProduct.buyPrice || 0;
       originalProduct.color =
         newColor || (Array.isArray(newProduct.color) ? newProduct.color[0] : newProduct.color);
       originalProduct.size =
-        newSize  || (Array.isArray(newProduct.size)  ? newProduct.size[0]  : newProduct.size);
+        newSize || (Array.isArray(newProduct.size) ? newProduct.size[0] : newProduct.size);
     } else {
       // Partial exchange — shrink the original line, add a new one for the replacement
       originalProduct.quantity -= quantity;
@@ -645,28 +645,28 @@ export const exchangeOrderProducts = asyncHandler(async (req, res, next) => {
       // because plain object literals pushed into a DocumentArray don't get an _id
       // tracked by Mongoose unless one is provided at push time.
       order.products.push({
-        _id:                new Types.ObjectId(),
-        productId:          newProductId,
+        _id: new Types.ObjectId(),
+        productId: newProductId,
         quantity,
-        price:              newSellingPrice,
+        price: newSellingPrice,
         discountPercentage: newDiscountPct,
-        discountAmount:     newDiscountAmt,
-        finalPrice:         newFinalPrice,
-        costPrice:          newProduct.buyPrice || 0,
+        discountAmount: newDiscountAmt,
+        finalPrice: newFinalPrice,
+        costPrice: newProduct.buyPrice || 0,
         color: newColor || (Array.isArray(newProduct.color) ? newProduct.color[0] : newProduct.color),
-        size:  newSize  || (Array.isArray(newProduct.size)  ? newProduct.size[0]  : newProduct.size),
+        size: newSize || (Array.isArray(newProduct.size) ? newProduct.size[0] : newProduct.size),
       });
     }
   }
 
   // Recalculate order totals from scratch after all line-item mutations
-  let recalcItemsPrice    = 0;
+  let recalcItemsPrice = 0;
   let recalcTotalDiscount = 0;
-  let recalcTotalCost     = 0;
-  let recalcItemsCount    = 0;
+  let recalcTotalCost = 0;
+  let recalcItemsCount = 0;
 
   for (const product of order.products) {
-    const sellingPrice   = product.price || 0;
+    const sellingPrice = product.price || 0;
     // Use the already-stored discountAmount and finalPrice instead of
     // re-deriving them from discountPercentage. These values were set
     // correctly during order creation or the exchange mutation above.
@@ -680,22 +680,22 @@ export const exchangeOrderProducts = asyncHandler(async (req, res, next) => {
       : sellingPrice - discountAmount;
 
     const qty = product.quantity || 0;
-    recalcItemsPrice    += sellingPrice * qty;
+    recalcItemsPrice += sellingPrice * qty;
     recalcTotalDiscount += discountAmount * qty;
-    recalcTotalCost     += (product.costPrice || 0) * qty;
-    recalcItemsCount    += qty;
+    recalcTotalCost += (product.costPrice || 0) * qty;
+    recalcItemsCount += qty;
   }
 
-  order.itemsPrice    = recalcItemsPrice;
+  order.itemsPrice = recalcItemsPrice;
   order.totalDiscount = recalcTotalDiscount;
-  order.totalCost     = recalcTotalCost;
-  order.itemsCount    = recalcItemsCount;
+  order.totalCost = recalcTotalCost;
+  order.itemsCount = recalcItemsCount;
 
   const newItemsRevenue = recalcItemsPrice - recalcTotalDiscount;
-  const newTotalPrice   = newItemsRevenue + order.shippingCost;
+  const newTotalPrice = newItemsRevenue + order.shippingCost;
 
   order.totalPrice = newTotalPrice;
-  
+
   // UPDATE PROFIT: recalculate estimatedProfit after exchange
   // Reset realizedProfit since order specs changed (will be recalculated if delivered)
   order.estimatedProfit = newItemsRevenue - recalcTotalCost;
@@ -716,17 +716,17 @@ export const exchangeOrderProducts = asyncHandler(async (req, res, next) => {
   // Per-item summary for the response — show both selling prices and final prices
   // so the caller can display the full breakdown to the customer.
   const exchangeSummary = exchanges.map((e) => ({
-    originalProductId:        e.originalProductId,
-    newProductId:             e.newProductId,
-    quantity:                 e.quantity,
-    originalSellingPrice:     e.originalSellingPrice.toFixed(2),
-    originalDiscountPct:      e.originalDiscountPct,
+    originalProductId: e.originalProductId,
+    newProductId: e.newProductId,
+    quantity: e.quantity,
+    originalSellingPrice: e.originalSellingPrice.toFixed(2),
+    originalDiscountPct: e.originalDiscountPct,
     originalFinalPricePerUnit: e.originalFinalPrice.toFixed(2),
-    newSellingPrice:          e.newSellingPrice.toFixed(2),
-    newDiscountPct:           e.newDiscountPct,
-    newFinalPricePerUnit:     e.newFinalPrice.toFixed(2),
-    differencePerUnit:        (e.newFinalPrice - e.originalFinalPrice).toFixed(2),
-    totalLineDifference:      e.priceAdjustment.toFixed(2),
+    newSellingPrice: e.newSellingPrice.toFixed(2),
+    newDiscountPct: e.newDiscountPct,
+    newFinalPricePerUnit: e.newFinalPrice.toFixed(2),
+    differencePerUnit: (e.newFinalPrice - e.originalFinalPrice).toFixed(2),
+    totalLineDifference: e.priceAdjustment.toFixed(2),
   }));
 
   res.json({
@@ -736,12 +736,12 @@ export const exchangeOrderProducts = asyncHandler(async (req, res, next) => {
       orderId: order._id,
       exchangeSummary,
       totalPriceAdjustment: totalPriceAdjustment.toFixed(2),
-      previousTotalPrice:   (newTotalPrice - totalPriceAdjustment).toFixed(2),
-      newTotalPrice:        newTotalPrice.toFixed(2),
-      depositAlreadyPaid:   order.depositAmount.toFixed(2),
-      newDueAmount:         order.dueAmount.toFixed(2),
-      exchangeReason:       order.exchangeReason,
-      updatedOrder:         order,
+      previousTotalPrice: (newTotalPrice - totalPriceAdjustment).toFixed(2),
+      newTotalPrice: newTotalPrice.toFixed(2),
+      depositAlreadyPaid: order.depositAmount.toFixed(2),
+      newDueAmount: order.dueAmount.toFixed(2),
+      exchangeReason: order.exchangeReason,
+      updatedOrder: order,
     },
   });
 });
