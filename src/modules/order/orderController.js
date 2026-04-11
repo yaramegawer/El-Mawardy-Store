@@ -56,8 +56,8 @@ export const createOrder = asyncHandler(async (req, res, next) => {
       productId: item.productId,
       quantity: orderQuantity,
       price: snapshotPrice,
-      discountPercentage: 0,
-      discountAmount: item.discount,
+      discountPercentage:product.discount ,
+      discountAmount: (snapshotPrice/product.discount)-snapshotPrice,
       finalPrice: snapshotPrice,  // price IS the final price
       costPrice: snapshotCostPrice,
       color: snapshotColor,
