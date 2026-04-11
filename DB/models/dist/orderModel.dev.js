@@ -104,11 +104,19 @@ var orderSchema = new _mongoose.Schema({
     required: true
   },
   // sum of (costPrice × qty)
-  profit: {
+  // ── Financial Metrics ──────────────────────────────────────────────────────
+  // Revenue = itemsPrice - totalDiscount (product sales only, excl. shipping)
+  // Shipping is a service fee, not product revenue
+  estimatedProfit: {
     type: Number,
     required: true
   },
-  // (itemsPrice - totalDiscount) - totalCost
+  // calculated at creation: (itemsPrice - totalDiscount) - totalCost
+  realizedProfit: {
+    type: Number,
+    "default": null
+  },
+  // set only when status becomes "delivered"
   itemsCount: {
     type: Number,
     required: true
@@ -140,7 +148,7 @@ var orderSchema = new _mongoose.Schema({
   },
   paymentStatus: {
     type: String,
-    "enum": ["pending", "deposit_sent", "completed"],
+    "enum": ["pending", "deposit_sent", "completed", "deposit_returned"],
     "default": "pending"
   },
   depositConfirmed: {

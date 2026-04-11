@@ -32,7 +32,13 @@ const orderSchema = new Schema(
     totalDiscount: { type: Number, default: 0 },     // sum of (discountAmount × qty)
     totalPrice:    { type: Number, required: true }, // itemsPrice - totalDiscount + shippingCost
     totalCost:     { type: Number, required: true }, // sum of (costPrice × qty)
-    profit:        { type: Number, required: true }, // (itemsPrice - totalDiscount) - totalCost
+    
+    // ── Financial Metrics ──────────────────────────────────────────────────────
+    // Revenue = itemsPrice - totalDiscount (product sales only, excl. shipping)
+    // Shipping is a service fee, not product revenue
+    estimatedProfit: { type: Number, required: true }, // calculated at creation: (itemsPrice - totalDiscount) - totalCost
+    realizedProfit:  { type: Number, default: null }, // set only when status becomes "delivered"
+    
     itemsCount:    { type: Number, required: true }, // total units across all line items
 
     depositAmount:        { type: Number, required: true },                                   // 50% of totalPrice
@@ -41,7 +47,7 @@ const orderSchema = new Schema(
     duePaymentMethod:     { type: String, enum: ["vodafone_cash", "cash_on_delivery"], required: true },
 
     orderDate:        { type: Date, default: Date.now },
-    paymentStatus:    { type: String, enum: ["pending", "deposit_sent", "completed"], default: "pending" },
+    paymentStatus:    { type: String, enum: ["pending", "deposit_sent", "completed", "deposit_returned"], default: "pending" },
     depositConfirmed: { type: Boolean, default: false }, // set true by moderator via confirm-deposit
     paymentProof:     { type: String },                  // image URL, optional
 

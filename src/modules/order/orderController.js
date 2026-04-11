@@ -73,9 +73,12 @@ export const createOrder = asyncHandler(async (req, res, next) => {
   const itemsPriceAfterDiscount = itemsPrice - totalDiscount;
   const totalPrice = itemsPriceAfterDiscount + shippingCost;
 
-  // FIX: profit = revenue from items (after discount) minus cost of goods.
-  // Shipping cost is not product revenue, so it must not inflate profit.
-  const profit = itemsPriceAfterDiscount - totalCost;
+  // Financial clarity:
+  // - Revenue (products only) = itemsPrice - totalDiscount
+  // - Shipping is a service fee, NOT product revenue
+  // - EstimatedProfit = Revenue - Cost of Goods (calculated at creation for forecasting)
+  // - RealizedProfit = final profit recorded only when status becomes "delivered"
+  const estimatedProfit = itemsPriceAfterDiscount - totalCost;
 
   const depositAmount = totalPrice * 0.5;
   const dueAmount = totalPrice - depositAmount;
@@ -92,7 +95,8 @@ export const createOrder = asyncHandler(async (req, res, next) => {
     totalDiscount,
     totalPrice,
     totalCost,
-    profit,           // FIX: was (totalPrice - totalCost), which over-counted shipping
+    estimatedProfit,
+    realizedProfit: null, // will be set when order is delivered
     itemsCount: totalItems,
     depositAmount,
     depositPaymentMethod: depositPaymentMethod || "vodafone_cash",
@@ -113,8 +117,10 @@ export const createOrder = asyncHandler(async (req, res, next) => {
     depositInfo: {
       itemsPrice: itemsPrice.toFixed(2),
       totalDiscount: totalDiscount.toFixed(2),
+      revenue: itemsPriceAfterDiscount.toFixed(2), // product sales only (excl. shipping)
       shippingCost,
       totalPrice: totalPrice.toFixed(2),
+      estimatedProfit: estimatedProfit.toFixed(2), // forecast for dashboard
       depositAmount: depositAmount.toFixed(2),
       dueAmount: dueAmount.toFixed(2),
       paymentMethod: depositPaymentMethod || "vodafone_cash",
@@ -184,12 +190,19 @@ export const getFinanceAnalytics = asyncHandler(async (req, res, next) => {
       // 1. ADD RETURNS & DEPOSITS (We do this for ALL orders)
       acc.totalReturns += order.returnAmount || 0;
       
-      if (order.depositConfirmed && order.source !== "store" && order.status !== "cancelled") {
+      // Only count deposits that are still owed (not returned/refunded)
+      if (order.depositConfirmed && order.source !== "store" && order.status !== "cancelled" && order.paymentStatus !== "deposit_returned") {
         acc.totalDeposits += order.depositAmount || 0;
       }
       // 2. BLOCK PENDING, CANCELLED, OR FULLY RETURNED ORDERS FROM REVENUE
       // We gathered their deposits/returns above, but we stop here so they don't break our profit margins!
+      // Exclude orders that are not confirmed/completed (pending, cancelled, returned, or awaiting delivery)
       if (order.isReturned || order.status === "pending" || order.status === "cancelled") {
+         return acc;
+      }
+      
+      // Only count orders that have been delivered (realized profit) or shipped (in-transit, likely to complete)
+      if (order.status !== "shipped" && order.status !== "delivered") {
          return acc;
       }
       // 3. REVENUE & PROFIT LOGIC (Only runs for active, unreturned orders)
@@ -303,8 +316,8 @@ export const updateOrderStatus = asyncHandler(async (req, res, next) => {
     if (!order.refundStatus || order.refundStatus === "none") {
       if (order.depositConfirmed) {
         await restoreOrderStock(order);
-        order.paymentStatus = "pending";
-        order.refundStatus = "pending";
+        order.paymentStatus = "deposit_returned"; // Mark deposit as pending refund
+        order.refundStatus = "pending"; // Refund processing status
         order.returnAmount = order.depositAmount || 0;
         order.returnReason = "Order cancelled - deposit refund pending";
         order.refundDate = new Date();
@@ -312,9 +325,12 @@ export const updateOrderStatus = asyncHandler(async (req, res, next) => {
     }
   }
 
-  // FIX: mark payment as completed when the order is delivered
+  // Record realizedProfit only when order is delivered (confirmed transaction)
   if (status === "delivered") {
     order.paymentStatus = "completed";
+    // RealizedProfit = Revenue (excl. shipping) - Cost of Goods
+    const itemsPriceAfterDiscount = order.itemsPrice - order.totalDiscount;
+    order.realizedProfit = itemsPriceAfterDiscount - order.totalCost;
   }
 
   order.status = status;
@@ -415,6 +431,11 @@ export const returnOrder = asyncHandler(async (req, res, next) => {
   order.returnReason = returnReason || "Customer return";
   order.returnDate = new Date();
   order.refundStatus = "pending";
+  
+  // If deposit was confirmed, mark payment status as deposit_returned for tracking
+  if (order.depositConfirmed && order.paymentStatus !== "deposit_returned") {
+    order.paymentStatus = "deposit_returned";
+  }
 
   await order.save();
 
