@@ -89,6 +89,7 @@ export const createOrder = asyncHandler(async (req, res, next) => {
     totalDiscount: 0,
     totalPrice,
     totalCost,
+    priceWithoutShipping: itemsPrice, // Product revenue excluding shipping
     estimatedProfit,
     realizedProfit: null, // will be set when order is delivered
     itemsCount: totalItems,
@@ -143,10 +144,16 @@ export const getAllOrders = asyncHandler(async (req, res, next) => {
     Order.countDocuments(filter),
   ]);
 
+  // Add revenue field to each order (uses priceWithoutShipping field)
+  const ordersWithRevenue = paginatedOrders.map(order => ({
+    ...order.toObject(),
+    revenue: order.priceWithoutShipping || 0,
+  }));
+
   res.json({
     success: true,
     message: "Orders retrieved successfully",
-    data: paginatedOrders,
+    data: ordersWithRevenue,
     pagination: { page, limit, total },
   });
 });
@@ -156,7 +163,12 @@ export const getOrderById = asyncHandler(async (req, res, next) => {
   const order = await Order.findById(req.params.id);
   if (!order) return next(new Error("Order not found!", { cause: 404 }));
 
-  res.json({ success: true, message: "Order retrieved successfully", data: order });
+  const orderWithRevenue = {
+    ...order.toObject(),
+    revenue: order.priceWithoutShipping || 0,
+  };
+
+  res.json({ success: true, message: "Order retrieved successfully", data: orderWithRevenue });
 });
 
 
@@ -230,11 +242,8 @@ export const getFinanceAnalytics = asyncHandler(async (req, res, next) => {
       const totalDiscount = order.totalDiscount || 0;
 
       acc.totalOrders += 1;
-      // totalRevenue = gross product revenue BEFORE discount (itemsPrice).
-      // order.totalPrice already has discount subtracted + shipping added,
-      // so using it here would double-count the discount when totalDiscount
-      // is also reported separately.
-      acc.totalRevenue += order.itemsPrice || 0;
+      // Revenue = product sales excluding shipping (uses priceWithoutShipping field)
+      acc.totalRevenue += order.priceWithoutShipping || 0;
       acc.totalShipping += order.shippingCost || 0;
       acc.totalDiscount += totalDiscount;
       acc.totalCost += orderCost;
@@ -358,9 +367,11 @@ export const updateOrderStatus = asyncHandler(async (req, res, next) => {
     // FINANCIAL ADJUSTMENT: Reverse profit impact when order is cancelled
     // Keep estimatedProfit intact so we have the historical footprint, but
     // set realizedProfit to negative of estimatedProfit to track the "missed" opportunity.
+    // Set priceWithoutShipping to 0 since cancelled orders don't generate revenue
     if (order.status !== "cancelled") {
       const profitToReverse = order.estimatedProfit || 0;
       order.realizedProfit = -Math.abs(profitToReverse); // Track profit reversal as negative
+      order.priceWithoutShipping = 0; // No revenue from cancelled orders
     }
   }
 
@@ -695,6 +706,7 @@ export const exchangeOrderProducts = asyncHandler(async (req, res, next) => {
   const newTotalPrice = newItemsRevenue + order.shippingCost;
 
   order.totalPrice = newTotalPrice;
+  order.priceWithoutShipping = newItemsRevenue; // Update revenue field
 
   // UPDATE PROFIT: recalculate estimatedProfit after exchange
   // Reset realizedProfit since order specs changed (will be recalculated if delivered)

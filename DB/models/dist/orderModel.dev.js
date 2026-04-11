@@ -254,6 +254,7 @@ var orderSchema = new _mongoose.Schema({
       "default": Date.now
     }
   }],
+  priceWithoutShipping: Number,
   exchangeReason: {
     type: String
   }

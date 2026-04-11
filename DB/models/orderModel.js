@@ -98,6 +98,7 @@ const orderSchema = new Schema(
         exchangeDate: { type: Date, default: Date.now },
       },
     ],
+    priceWithoutShipping:Number,
 
     exchangeReason: { type: String },
   },
