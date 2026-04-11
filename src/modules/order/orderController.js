@@ -18,7 +18,6 @@ export const createOrder = asyncHandler(async (req, res, next) => {
   } = req.body;
 
   let itemsPrice = 0;
-  let totalDiscount = 0;
   let totalCost = 0;
   let totalItems = 0;
   const orderProducts = [];
@@ -35,9 +34,9 @@ export const createOrder = asyncHandler(async (req, res, next) => {
       return next(new Error(`Insufficient stock for product ${product.name}`, { cause: 400 }));
     }
 
+    // product.price is already the final selling price (discount already applied in product model)
     const snapshotPrice = product.price;
     const snapshotCostPrice = product.buyPrice;
-    const snapshotDiscount = product.discount || 0;
 
     if (snapshotCostPrice == null) {
       return next(new Error(
@@ -46,14 +45,10 @@ export const createOrder = asyncHandler(async (req, res, next) => {
       ));
     }
 
-    const productDiscountAmount = (snapshotPrice * snapshotDiscount) / 100;
-    const productFinalPrice = snapshotPrice - productDiscountAmount;
-
     const snapshotColor = item.color || product.color;
     const snapshotSize = item.size || product.size;
 
     itemsPrice += orderQuantity * snapshotPrice;
-    totalDiscount += orderQuantity * productDiscountAmount;
     totalCost += orderQuantity * snapshotCostPrice;
     totalItems += orderQuantity;
 
@@ -61,24 +56,23 @@ export const createOrder = asyncHandler(async (req, res, next) => {
       productId: item.productId,
       quantity: orderQuantity,
       price: snapshotPrice,
-      discountPercentage: snapshotDiscount,
-      discountAmount: productDiscountAmount,
-      finalPrice: productFinalPrice,
+      discountPercentage: 0,
+      discountAmount: 0,
+      finalPrice: snapshotPrice,  // price IS the final price
       costPrice: snapshotCostPrice,
       color: snapshotColor,
       size: snapshotSize,
     });
   }
 
-  const itemsPriceAfterDiscount = itemsPrice - totalDiscount;
-  const totalPrice = itemsPriceAfterDiscount + shippingCost;
+  const totalPrice = itemsPrice + shippingCost;
 
   // Financial clarity:
-  // - Revenue (products only) = itemsPrice - totalDiscount
+  // - Revenue (products only) = itemsPrice (price already reflects any discounts)
   // - Shipping is a service fee, NOT product revenue
   // - EstimatedProfit = Revenue - Cost of Goods (calculated at creation for forecasting)
   // - RealizedProfit = final profit recorded only when status becomes "delivered"
-  const estimatedProfit = itemsPriceAfterDiscount - totalCost;
+  const estimatedProfit = itemsPrice - totalCost;
 
   const depositAmount = totalPrice * 0.5;
   const dueAmount = totalPrice - depositAmount;
@@ -92,7 +86,7 @@ export const createOrder = asyncHandler(async (req, res, next) => {
     government,
     shippingCost,
     itemsPrice,
-    totalDiscount,
+    totalDiscount: 0,
     totalPrice,
     totalCost,
     estimatedProfit,
@@ -116,11 +110,10 @@ export const createOrder = asyncHandler(async (req, res, next) => {
     data: order,
     depositInfo: {
       itemsPrice: itemsPrice.toFixed(2),
-      totalDiscount: totalDiscount.toFixed(2),
-      revenue: itemsPriceAfterDiscount.toFixed(2), // product sales only (excl. shipping)
+      revenue: itemsPrice.toFixed(2),
       shippingCost,
       totalPrice: totalPrice.toFixed(2),
-      estimatedProfit: estimatedProfit.toFixed(2), // forecast for dashboard
+      estimatedProfit: estimatedProfit.toFixed(2),
       depositAmount: depositAmount.toFixed(2),
       dueAmount: dueAmount.toFixed(2),
       paymentMethod: depositPaymentMethod || "vodafone_cash",
