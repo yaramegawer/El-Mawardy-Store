@@ -299,7 +299,7 @@ export const getFinanceAnalytics = asyncHandler(async (req, res, next) => {
 
 
 export const updateOrderStatus = asyncHandler(async (req, res, next) => {
-  const { status,notes } = req.body;
+  const { status, paymentStatus, notes } = req.body;
   const order = await Order.findById(req.params.id);
   if (!order) return next(new Error("Order not found!", { cause: 404 }));
 
@@ -331,6 +331,19 @@ export const updateOrderStatus = asyncHandler(async (req, res, next) => {
     // RealizedProfit = Revenue (excl. shipping) - Cost of Goods
     const itemsPriceAfterDiscount = order.itemsPrice - order.totalDiscount;
     order.realizedProfit = itemsPriceAfterDiscount - order.totalCost;
+  }
+
+  // Allow manual override of paymentStatus if provided
+  // For delivered/cancelled statuses, override only if explicitly same as set above
+  // For other statuses, allow any valid paymentStatus
+  if (paymentStatus) {
+    if (status === "delivered" || status === "cancelled") {
+      // Manual override for delivered/cancelled when explicitly provided
+      order.paymentStatus = paymentStatus;
+    } else if (!status || (status !== "delivered" && status !== "cancelled")) {
+      // Allow override for pending, confirmed, shipped
+      order.paymentStatus = paymentStatus;
+    }
   }
 
   order.status = status;

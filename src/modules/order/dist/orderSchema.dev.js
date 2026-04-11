@@ -40,7 +40,9 @@ var updateOrderStatus = _joi["default"].object({
   // The controller sets paymentStatus = "completed" on "delivered",
   // so blocking it here would silently prevent that transition.
   status: _joi["default"].string().valid("pending", "confirmed", "shipped", "delivered", "cancelled").required(),
-  notes: _joi["default"].string()
+  paymentStatus: _joi["default"].string().valid("pending", "deposit_sent", "completed", "deposit_returned").optional(),
+  // Allow manual override of payment status
+  notes: _joi["default"].string().optional()
 });
 
 exports.updateOrderStatus = updateOrderStatus;

@@ -30,7 +30,10 @@ export const updateOrderStatus = joi.object({
   status: joi.string()
     .valid("pending", "confirmed", "shipped", "delivered", "cancelled")
     .required(),
-    notes:joi.string(),
+  paymentStatus: joi.string()
+    .valid("pending", "deposit_sent", "completed", "deposit_returned")
+    .optional(), // Allow manual override of payment status
+  notes: joi.string().optional(),
 });
 
 export const confirmDeposit = joi.object({
