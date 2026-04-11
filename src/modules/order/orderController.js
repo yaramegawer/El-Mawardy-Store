@@ -194,10 +194,17 @@ export const getFinanceAnalytics = asyncHandler(async (req, res, next) => {
       if (order.depositConfirmed && order.source !== "store" && order.status !== "cancelled" && order.paymentStatus !== "deposit_returned") {
         acc.totalDeposits += order.depositAmount || 0;
       }
-      // 2. BLOCK PENDING, CANCELLED, OR FULLY RETURNED ORDERS FROM REVENUE
+      
+      // 2. TRACK CANCELLED PROFIT ADJUSTMENTS
+      // When an order is cancelled, realizedProfit is set to negative of estimatedProfit to record the loss
+      if (order.status === "cancelled") {
+        acc.totalCancelledProfit += Math.abs(order.realizedProfit || 0); // Track lost profit
+        return acc; // Skip revenue calculations for cancelled orders
+      }
+      
+      // 3. BLOCK PENDING OR FULLY RETURNED ORDERS FROM REVENUE
       // We gathered their deposits/returns above, but we stop here so they don't break our profit margins!
-      // Exclude orders that are not confirmed/completed (pending, cancelled, returned, or awaiting delivery)
-      if (order.isReturned || order.status === "pending" || order.status === "cancelled") {
+      if (order.isReturned || order.status === "pending") {
          return acc;
       }
       
@@ -205,15 +212,26 @@ export const getFinanceAnalytics = asyncHandler(async (req, res, next) => {
       if (order.status !== "shipped" && order.status !== "delivered") {
          return acc;
       }
-      // 3. REVENUE & PROFIT LOGIC (Only runs for active, unreturned orders)
+      // 4. REVENUE & PROFIT LOGIC (Only runs for active, unreturned, non-cancelled orders)
       const orderCost =
         order.totalCost != null
           ? order.totalCost
           : order.products.reduce((sum, item) => sum + (item.costPrice || 0) * item.quantity, 0);
-      const orderProfit =
-        order.profit != null
-          ? order.profit
-          : order.totalPrice - order.shippingCost - order.totalDiscount - orderCost;
+      
+      // Use realizedProfit for delivered orders (confirmed final profit)
+      // Use estimatedProfit for shipped orders (forecast profit)
+      // Fallback to calculation for backwards compatibility
+      let orderProfit;
+      if (order.status === "delivered" && order.realizedProfit != null) {
+        orderProfit = order.realizedProfit;
+      } else if (order.estimatedProfit != null) {
+        orderProfit = order.estimatedProfit;
+      } else {
+        // Backwards compatibility: calculate from components
+        const itemsPriceAfterDiscount = order.itemsPrice - order.totalDiscount;
+        orderProfit = itemsPriceAfterDiscount - orderCost;
+      }
+      
       const orderItems =
         order.itemsCount != null
           ? order.itemsCount
@@ -270,10 +288,15 @@ export const getFinanceAnalytics = asyncHandler(async (req, res, next) => {
       totalItemsSold: 0,
       totalReturns: 0,
       totalDeposits: 0,
+      totalCancelledProfit: 0, // Track profit lost from cancelled orders
       products: {},
     }
   );
   const productBreakdown = Object.values(summary.products).sort((a, b) => b.revenue - a.revenue);
+  
+  // Calculate net profit: actual profit minus cancelled profit adjustments
+  const netProfit = summary.totalProfit - summary.totalCancelledProfit;
+  
   res.json({
     success: true,
     message: "Finance analytics retrieved successfully",
@@ -283,7 +306,9 @@ export const getFinanceAnalytics = asyncHandler(async (req, res, next) => {
       totalShipping: summary.totalShipping,
       totalDiscount: summary.totalDiscount,
       totalCost: summary.totalCost,
-      totalProfit: summary.totalProfit,
+      totalProfit: summary.totalProfit, // Profit from completed orders
+      totalCancelledProfit: summary.totalCancelledProfit, // Profit lost from cancellations
+      netProfit: netProfit, // Actual realized profit after cancellations
       totalItemsSold: summary.totalItemsSold,
       totalReturns: summary.totalReturns,
       totalDeposits: summary.totalDeposits,
@@ -323,6 +348,11 @@ export const updateOrderStatus = asyncHandler(async (req, res, next) => {
         order.refundDate = new Date();
       }
     }
+    // FINANCIAL ADJUSTMENT: Reverse profit impact when order is cancelled
+    // Set estimatedProfit to 0 (this order no longer produces expected profit)
+    // Set realizedProfit to negative of estimatedProfit to record the loss
+    order.estimatedProfit = 0;
+    order.realizedProfit = -(order.estimatedProfit || 0); // Track profit reversal as negative
   }
 
   // Record realizedProfit only when order is delivered (confirmed transaction)
@@ -334,8 +364,6 @@ export const updateOrderStatus = asyncHandler(async (req, res, next) => {
   }
 
   // Allow manual override of paymentStatus if provided
-  // For delivered/cancelled statuses, override only if explicitly same as set above
-  // For other statuses, allow any valid paymentStatus
   if (paymentStatus) {
     if (status === "delivered" || status === "cancelled") {
       // Manual override for delivered/cancelled when explicitly provided
@@ -347,7 +375,7 @@ export const updateOrderStatus = asyncHandler(async (req, res, next) => {
   }
 
   order.status = status;
-  order.notes=notes;
+  order.notes = notes;
   await order.save();
 
   res.json({ success: true, message: "Order status updated successfully", data: order });
@@ -653,7 +681,11 @@ export const exchangeOrderProducts = asyncHandler(async (req, res, next) => {
   const newTotalPrice   = newItemsRevenue + order.shippingCost;
 
   order.totalPrice = newTotalPrice;
-  order.profit     = newItemsRevenue - recalcTotalCost;
+  
+  // UPDATE PROFIT: recalculate estimatedProfit after exchange
+  // Reset realizedProfit since order specs changed (will be recalculated if delivered)
+  order.estimatedProfit = newItemsRevenue - recalcTotalCost;
+  order.realizedProfit = null; // Reset realized profit, will be set again when delivered
 
   // depositAmount stays locked — the customer already paid it.
   // dueAmount absorbs the full price delta from the exchange.
