@@ -670,12 +670,17 @@ export const exchangeOrderProducts = asyncHandler(async (req, res, next) => {
 
   for (const product of order.products) {
     const sellingPrice   = product.price || 0;
-    const discountAmount = (sellingPrice * (product.discountPercentage || 0)) / 100;
-    const finalPrice     = sellingPrice - discountAmount;
-
-    // Keep stored fields consistent with recalculated values
-    product.finalPrice    = finalPrice;
-    product.discountAmount = discountAmount;
+    // Use the already-stored discountAmount and finalPrice instead of
+    // re-deriving them from discountPercentage. These values were set
+    // correctly during order creation or the exchange mutation above.
+    // Re-deriving them would risk applying the discount twice or
+    // producing rounding mismatches.
+    const discountAmount = product.discountAmount != null
+      ? product.discountAmount
+      : (sellingPrice * (product.discountPercentage || 0)) / 100;
+    const finalPrice = product.finalPrice != null
+      ? product.finalPrice
+      : sellingPrice - discountAmount;
 
     const qty = product.quantity || 0;
     recalcItemsPrice    += sellingPrice * qty;
