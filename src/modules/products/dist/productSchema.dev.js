@@ -22,8 +22,7 @@ var createProduct = _joi["default"].object({
   description: _joi["default"].string()["default"](" "),
   stock: _joi["default"].number()["default"](0),
   category: _joi["default"].string().required(),
-  season: _joi["default"].string().required(),
-  discount: _joi["default"].number().min(0).max(100)["default"](0)
+  season: _joi["default"].string().required()
 }).required();
 
 exports.createProduct = createProduct;

@@ -13,7 +13,6 @@ export const createProduct=joi.object({
     stock:joi.number().default(0),
     category:joi.string().required(),
     season:joi.string().required(),
-    discount:joi.number().min(0).max(100).default(0),
 }).required();
 
 export const deleteProduct=joi.object({

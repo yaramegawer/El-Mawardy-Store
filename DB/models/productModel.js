@@ -46,10 +46,7 @@ const productSchema=new Schema({
     season:{type:String,required:true},
     stock:{type:Number,default:0},
     discount:{type:Number,default:0},
-    discountedPrice:{
-         type:Number,
-        required:true
-    }
+    
     // percentage discount (e.g., 20 for 20% off) 
 },{timestamps:true});
 

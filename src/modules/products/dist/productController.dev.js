@@ -30,7 +30,7 @@ function _iterableToArray(iter) { if (Symbol.iterator in Object(iter) || Object.
 function _arrayWithoutHoles(arr) { if (Array.isArray(arr)) { for (var i = 0, arr2 = new Array(arr.length); i < arr.length; i++) { arr2[i] = arr[i]; } return arr2; } }
 
 var createProduct = (0, _asyncHandler.asyncHandler)(function _callee(req, res, next) {
-  var cloudFolder, cloudFolderStr, subImageUploads, defaultImageUpload, results, defaultResult, subImagesArray, price, discount, discountedPrice, product;
+  var cloudFolder, cloudFolderStr, subImageUploads, defaultImageUpload, results, defaultResult, subImagesArray, product;
   return regeneratorRuntime.async(function _callee$(_context) {
     while (1) {
       switch (_context.prev = _context.next) {
@@ -70,15 +70,10 @@ var createProduct = (0, _asyncHandler.asyncHandler)(function _callee(req, res, n
               id: res.public_id,
               url: res.secure_url
             };
-          });
-          price = Number(req.body.price);
-          discount = Number(req.body.discount || 0);
-          discountedPrice = price - price * discount / 100; // 5. Create product in DB
+          }); // 5. Create product in DB
 
-          _context.next = 16;
+          _context.next = 13;
           return regeneratorRuntime.awrap(_productModel.Product.create(_objectSpread({}, req.body, {
-            discount: discount,
-            discountedPrice: discountedPrice,
             cloudFolder: cloudFolder,
 
             /* createdBy: req.user._id, */
@@ -89,14 +84,14 @@ var createProduct = (0, _asyncHandler.asyncHandler)(function _callee(req, res, n
             images: subImagesArray
           })));
 
-        case 16:
+        case 13:
           product = _context.sent;
           return _context.abrupt("return", res.json({
             success: true,
             message: "product created successfully"
           }));
 
-        case 18:
+        case 15:
         case "end":
           return _context.stop();
       }
@@ -251,12 +246,14 @@ var deleteProduct = (0, _asyncHandler.asyncHandler)(function _callee4(req, res, 
 });
 exports.deleteProduct = deleteProduct;
 var updateProduct = (0, _asyncHandler.asyncHandler)(function _callee5(req, res, next) {
-  var updateFields, product, newPrice, newDiscount, discountedPrice, updatedProduct;
+  var _req$body, name, price, discount, buyPrice, description, stock, category, season, color, size, product, discountAmount, updatedProduct;
+
   return regeneratorRuntime.async(function _callee5$(_context5) {
     while (1) {
       switch (_context5.prev = _context5.next) {
         case 0:
-          updateFields = {};
+          _req$body = req.body, name = _req$body.name, price = _req$body.price, discount = _req$body.discount, buyPrice = _req$body.buyPrice, description = _req$body.description, stock = _req$body.stock, category = _req$body.category, season = _req$body.season, color = _req$body.color, size = _req$body.size; // Check if the product exists
+
           _context5.next = 3;
           return regeneratorRuntime.awrap(_productModel.Product.findById(req.params.id));
 
@@ -274,26 +271,29 @@ var updateProduct = (0, _asyncHandler.asyncHandler)(function _callee5(req, res, 
           return _context5.abrupt("return");
 
         case 7:
-          newPrice = req.body.price != null ? Number(req.body.price) : product.price;
-          newDiscount = req.body.discount != null ? Number(req.body.discount) : product.discount;
-          discountedPrice = newPrice - newPrice * newDiscount / 100;
-          if (req.body.name != null) updateFields.name = req.body.name;
-          if (req.body.price != null) updateFields.price = newPrice;
-          if (req.body.buyPrice != null) updateFields.buyPrice = req.body.buyPrice;
-          if (req.body.description != null) updateFields.description = req.body.description;
-          if (req.body.stock != null) updateFields.stock = req.body.stock;
-          if (req.body.category != null) updateFields.category = req.body.category;
-          if (req.body.season != null) updateFields.season = req.body.season;
-          if (req.body.color != null) updateFields.color = req.body.color;
-          if (req.body.size != null) updateFields.size = req.body.size;
-          updateFields.discount = newDiscount;
-          updateFields.discountedPrice = discountedPrice;
-          _context5.next = 23;
-          return regeneratorRuntime.awrap(_productModel.Product.findByIdAndUpdate(req.params.id, updateFields, {
+          //qpply discount if provided
+          if (discount) {
+            discountAmount = price * req.body.discount / 100;
+            price = price - discountAmount;
+          }
+
+          _context5.next = 10;
+          return regeneratorRuntime.awrap(_productModel.Product.findByIdAndUpdate(req.params.id, {
+            name: name,
+            price: price,
+            buyPrice: buyPrice,
+            description: description,
+            stock: stock,
+            category: category,
+            season: season,
+            color: color,
+            size: size,
+            discount: discount
+          }, {
             "new": true
           }));
 
-        case 23:
+        case 10:
           updatedProduct = _context5.sent;
           return _context5.abrupt("return", res.json({
             success: true,
@@ -301,7 +301,7 @@ var updateProduct = (0, _asyncHandler.asyncHandler)(function _callee5(req, res, 
             product: updatedProduct
           }));
 
-        case 25:
+        case 12:
         case "end":
           return _context5.stop();
       }

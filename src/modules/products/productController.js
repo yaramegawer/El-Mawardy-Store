@@ -24,15 +24,9 @@ export const createProduct = asyncHandler(async (req, res, next) => {
     // 4. Map the remaining results (all the subImages) into the format MongoDB expects
     const subImagesArray = results.map(res => ({ id: res.public_id, url: res.secure_url }));
     
-    const price = Number(req.body.price);
-    const discount = Number(req.body.discount || 0);
-    const discountedPrice = price - (price * discount) / 100;
-
     // 5. Create product in DB
     const product = await Product.create({
         ...req.body,
-        discount,
-        discountedPrice,
         cloudFolder,
         /* createdBy: req.user._id, */
         defaultImage: { 
@@ -116,30 +110,20 @@ export const deleteProduct=asyncHandler(async(req,res,next)=>{
 
 export const updateProduct = asyncHandler(async (req, res, next) => {
 
-    const updateFields = {};
+    let {name,price,discount,buyPrice,description,stock,category,season,color,size}=req.body;
+    // Check if the product exists
     const product = await Product.findById(req.params.id);
     if (!product) {
         next(new Error("Product not found", { cause: 404 }));
         return;
     }
+    //qpply discount if provided
+    if(discount){
+        const discountAmount=(price*req.body.discount)/100;
+        price=price-discountAmount;
+    }
 
-    const newPrice = req.body.price != null ? Number(req.body.price) : product.price;
-    const newDiscount = req.body.discount != null ? Number(req.body.discount) : product.discount;
-    const discountedPrice = newPrice - (newPrice * newDiscount) / 100;
-
-    if (req.body.name != null) updateFields.name = req.body.name;
-    if (req.body.price != null) updateFields.price = newPrice;
-    if (req.body.buyPrice != null) updateFields.buyPrice = req.body.buyPrice;
-    if (req.body.description != null) updateFields.description = req.body.description;
-    if (req.body.stock != null) updateFields.stock = req.body.stock;
-    if (req.body.category != null) updateFields.category = req.body.category;
-    if (req.body.season != null) updateFields.season = req.body.season;
-    if (req.body.color != null) updateFields.color = req.body.color;
-    if (req.body.size != null) updateFields.size = req.body.size;
-    updateFields.discount = newDiscount;
-    updateFields.discountedPrice = discountedPrice;
-
-    const updatedProduct = await Product.findByIdAndUpdate(req.params.id, updateFields, { new: true });
+    const updatedProduct=await Product.findByIdAndUpdate(req.params.id,{name,price,buyPrice,description,stock,category,season,color,size,discount},{new:true})
 
     return res.json({
         success: true,
