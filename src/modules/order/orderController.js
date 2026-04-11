@@ -237,7 +237,11 @@ export const getFinanceAnalytics = asyncHandler(async (req, res, next) => {
       const totalDiscount = order.totalDiscount || 0;
       
       acc.totalOrders += 1;
-      acc.totalRevenue += order.totalPrice || 0;
+      // totalRevenue = gross product revenue BEFORE discount (itemsPrice).
+      // order.totalPrice already has discount subtracted + shipping added,
+      // so using it here would double-count the discount when totalDiscount
+      // is also reported separately.
+      acc.totalRevenue += order.itemsPrice || 0;
       acc.totalShipping += order.shippingCost || 0;
       acc.totalDiscount += totalDiscount;
       acc.totalCost += orderCost;
