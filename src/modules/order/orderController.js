@@ -161,13 +161,18 @@ export const getOrderById = asyncHandler(async (req, res, next) => {
 });
 
 
+const restoreOrderStock = async (order) => {
+  if (!order.depositConfirmed) return;
+  for (const item of order.products) {
+    await Product.findByIdAndUpdate(item.productId, { $inc: { stock: item.quantity } });
+  }
+};
+
 export const getFinanceAnalytics = asyncHandler(async (req, res, next) => {
   const { startDate, endDate } = req.query;
-  // FIX: Include all orders (pending included) so we can catch all Deposits and Returns.
+  // FIX: Include all orders (pending included) so we can catch all Deposits, Returns, and Cancellations.
   // We remove `isReturned: { $ne: true }` so the database doesn't silently hide returned orders.
-  const filter = {
-    status: { $in: [ "confirmed", "shipped", "delivered"] }
-  };
+  const filter = {};
   if (startDate || endDate) {
     filter.orderDate = {};
     if (startDate) filter.orderDate.$gte = new Date(startDate);
@@ -179,12 +184,12 @@ export const getFinanceAnalytics = asyncHandler(async (req, res, next) => {
       // 1. ADD RETURNS & DEPOSITS (We do this for ALL orders)
       acc.totalReturns += order.returnAmount || 0;
       
-      if (order.depositConfirmed && order.source !== "store") {
+      if (order.depositConfirmed && order.source !== "store" && order.status !== "cancelled") {
         acc.totalDeposits += order.depositAmount || 0;
       }
-      // 2. BLOCK PENDING OR FULLY RETURNED ORDERS FROM REVENUE
+      // 2. BLOCK PENDING, CANCELLED, OR FULLY RETURNED ORDERS FROM REVENUE
       // We gathered their deposits/returns above, but we stop here so they don't break our profit margins!
-      if (order.isReturned || order.status === "pending") {
+      if (order.isReturned || order.status === "pending" || order.status === "cancelled") {
          return acc;
       }
       // 3. REVENUE & PROFIT LOGIC (Only runs for active, unreturned orders)
@@ -292,6 +297,19 @@ export const updateOrderStatus = asyncHandler(async (req, res, next) => {
       );
     }
     order.paymentStatus = "deposit_sent";
+  }
+
+  if (status === "cancelled") {
+    if (!order.refundStatus || order.refundStatus === "none") {
+      if (order.depositConfirmed) {
+        await restoreOrderStock(order);
+        order.paymentStatus = "pending";
+        order.refundStatus = "pending";
+        order.returnAmount = order.depositAmount || 0;
+        order.returnReason = "Order cancelled - deposit refund pending";
+        order.refundDate = new Date();
+      }
+    }
   }
 
   // FIX: mark payment as completed when the order is delivered
