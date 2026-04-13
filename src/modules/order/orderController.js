@@ -33,8 +33,12 @@ export const createOrder = asyncHandler(async (req, res, next) => {
 
     const orderQuantity = item.quantity || product.quantity || 1;
 
+    if (orderQuantity <= 0) {
+      return next(new Error(`Invalid quantity for product ${product.name}`, { cause: 400 }));
+    }
+
     if (orderQuantity > product.stock) {
-      return next(new Error(`Insufficient stock for product ${product.name}`, { cause: 400 }));
+      return next(new Error(`Insufficient stock for product ${product.name}. Required: ${orderQuantity}, Available: ${product.stock}`, { cause: 400 }));
     }
 
     // product.price is already the final selling price (discount already applied in product model)
@@ -51,6 +55,17 @@ export const createOrder = asyncHandler(async (req, res, next) => {
     const snapshotColor = item.color || product.color;
     const snapshotSize = item.size || product.size;
 
+    // Calculate discount properly - handle division by zero
+    const discountPercentage = product.discount || 0;
+    let originalPrice = snapshotPrice;
+    let discountAmount = 0;
+    
+    if (discountPercentage > 0) {
+      // If product has discount, calculate original price and discount amount
+      originalPrice = snapshotPrice / (1 - discountPercentage / 100);
+      discountAmount = originalPrice - snapshotPrice;
+    }
+
     itemsPrice += orderQuantity * snapshotPrice;
     totalCost += orderQuantity * snapshotCostPrice;
     totalItems += orderQuantity;
@@ -58,10 +73,10 @@ export const createOrder = asyncHandler(async (req, res, next) => {
     orderProducts.push({
       productId: item.productId,
       quantity: orderQuantity,
-      price: snapshotPrice,
-      discountPercentage:product.discount ,
-      discountAmount: (snapshotPrice/product.discount)-snapshotPrice,
-      finalPrice: snapshotPrice,  // price IS the final price
+      price: originalPrice, // Store original price before discount
+      discountPercentage: discountPercentage,
+      discountAmount: discountAmount,
+      finalPrice: snapshotPrice,  // price IS the final price after discount
       costPrice: snapshotCostPrice,
       color: snapshotColor,
       size: snapshotSize,
@@ -77,7 +92,8 @@ export const createOrder = asyncHandler(async (req, res, next) => {
   // - RealizedProfit = final profit recorded only when status becomes "delivered"
   const estimatedProfit = itemsPrice - totalCost;
 
-  const depositAmount = itemsPrice * 0.5;
+  const depositPercentage = 0.5; // 50% deposit - can be made configurable later
+  const depositAmount = itemsPrice * depositPercentage;
   const dueAmount = totalPrice - depositAmount;
 
   const order = await Order.create({
@@ -184,38 +200,27 @@ const restoreOrderStock = async (order) => {
 
 export const getFinanceAnalytics = asyncHandler(async (req, res, next) => {
   const { startDate, endDate } = req.query;
-  // FIX: Include all orders (pending included) so we can catch all Deposits, Returns, and Cancellations.
-  // We remove `isReturned: { $ne: true }` so the database doesn't silently hide returned orders.
-  const filter = {};
-  if (startDate || endDate) {
-    filter.orderDate = {};
-    if (startDate) filter.orderDate.$gte = new Date(startDate);
-    if (endDate) filter.orderDate.$lte = new Date(endDate);
-  }
-  const orders = await Order.find(filter).populate("products.productId", "name");
+  
+  // Helper function to create date filter
+  const createDateFilter = (dateField) => {
+    const filter = {};
+    if (startDate || endDate) {
+      filter[dateField] = {};
+      if (startDate) filter[dateField].$gte = new Date(startDate);
+      if (endDate) filter[dateField].$lte = new Date(endDate);
+    }
+    return filter;
+  };
 
-  // Query expenses with date filter
-  const expenseFilter = {};
-  if (startDate || endDate) {
-    expenseFilter.date = {};
-    if (startDate) expenseFilter.date.$gte = new Date(startDate);
-    if (endDate) expenseFilter.date.$lte = new Date(endDate);
-  }
-  const expenses = await Expense.find(expenseFilter);
+  // Fetch all data in parallel for better performance
+  const [orders, expenses, purchases] = await Promise.all([
+    Order.find(createDateFilter("orderDate")).populate("products.productId", "name"),
+    Expense.find(createDateFilter("date")),
+    Purchase.find(createDateFilter("date"))
+  ]);
 
-  // Query purchases with date filter
-  const purchaseFilter = {};
-  if (startDate || endDate) {
-    purchaseFilter.date = {};
-    if (startDate) purchaseFilter.date.$gte = new Date(startDate);
-    if (endDate) purchaseFilter.date.$lte = new Date(endDate);
-  }
-  const purchases = await Purchase.find(purchaseFilter);
-
-  // Calculate total expenses
+  // Calculate totals for expenses and purchases
   const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
-
-  // Calculate total purchases cost
   const totalPurchases = purchases.reduce((sum, pur) => sum + pur.totalCost, 0);
 
   const summary = orders.reduce(
@@ -375,40 +380,60 @@ export const getFinanceAnalytics = asyncHandler(async (req, res, next) => {
   // Total treasury: all realized profits - all expenses - all purchases
   const totalTreasury = summary.totalRealizedProfit - totalExpenses - totalPurchases;
 
+  // Additional profit calculations for consistency
+  const grossProfit = summary.totalRevenue - summary.totalCost;
+  const operatingProfit = grossProfit - totalExpenses;
+  const netProfitCalculated = operatingProfit - totalPurchases;
+
   res.json({
     success: true,
     message: "Finance analytics retrieved successfully",
     data: {
+      // Order metrics
       totalOrders: summary.totalOrders,
+      totalItemsSold: summary.totalItemsSold,
+      averageOrderValue: summary.totalOrders ? summary.totalRevenue / summary.totalOrders : 0,
+      
+      // Revenue and costs
       totalRevenue: summary.totalRevenue,
       totalShipping: summary.totalShipping,
       totalDiscount: summary.totalDiscount,
       totalCost: summary.totalCost,
-      totalEstimatedProfit: summary.totalEstimatedProfit,
-      totalRealizedProfit: summary.totalRealizedProfit,
-      totalProfit: summary.totalRealizedProfit, // Backwards compatibility for anything still using totalProfit
-      totalCancelledProfit: summary.totalCancelledProfit, // Track profit we missed out on
-      netProfit: netProfit, // Realized profit minus expenses
-      totalItemsSold: summary.totalItemsSold,
-      totalReturns: summary.totalReturns,
-      totalDeposits: summary.totalDeposits,
       totalExpenses: totalExpenses,
       totalPurchases: totalPurchases,
-      dailyTreasury: dailyTreasury, // Today's profits - today's expenses
-      totalTreasury: totalTreasury, // All profits - all expenses - purchases
+      
+      // Profit calculations (consistent naming)
+      grossProfit: grossProfit, // Revenue - Cost of Goods
+      operatingProfit: operatingProfit, // Gross Profit - Operating Expenses
+      totalEstimatedProfit: summary.totalEstimatedProfit, // Expected profit from all orders
+      totalRealizedProfit: summary.totalRealizedProfit, // Actual profit from delivered orders
+      netProfit: netProfitCalculated, // Final profit after all costs
+      totalProfit: summary.totalRealizedProfit, // Backwards compatibility
+      
+      // Financial movements
+      totalReturns: summary.totalReturns,
+      totalDeposits: summary.totalDeposits,
+      totalCancelledProfit: summary.totalCancelledProfit,
+      
+      // Treasury metrics
+      dailyTreasury: dailyTreasury, // Today's net profit
+      totalTreasury: totalTreasury, // Cumulative treasury balance
+      
+      // Performance metrics
       depositPercentage: summary.totalRevenue ? (summary.totalDeposits / summary.totalRevenue) * 100 : 0,
-      averageOrderValue: summary.totalOrders ? summary.totalRevenue / summary.totalOrders : 0,
-      averageProfitPerItem: summary.totalItemsSold
-        ? summary.totalRealizedProfit / summary.totalItemsSold
-        : 0,
+      profitMargin: summary.totalRevenue ? (netProfitCalculated / summary.totalRevenue) * 100 : 0,
+      averageProfitPerItem: summary.totalItemsSold ? summary.totalRealizedProfit / summary.totalItemsSold : 0,
+      averageProfitPerOrder: summary.totalOrders ? summary.totalRealizedProfit / summary.totalOrders : 0,
+      
+      // Detailed breakdowns
       productBreakdown,
-      expenses: expenses, // Detailed expenses
-      purchases: purchases, // Detailed purchases
+      expenses: expenses,
+      purchases: purchases,
     },
   });
 });
 
-
+// Add the missing function declaration
 export const updateOrderStatus = asyncHandler(async (req, res, next) => {
   const { status, paymentStatus, notes } = req.body;
   const order = await Order.findById(req.params.id);
@@ -535,10 +560,15 @@ export const deleteOrder = asyncHandler(async (req, res, next) => {
   res.json({ success: true, message: "Order deleted successfully" });
 });
 
-
 // PATCH /api/orders/:id/return — full refund with stock restoration
 export const returnOrder = asyncHandler(async (req, res, next) => {
   const { returnReason } = req.body;
+  
+  // Validation
+  if (!returnReason || returnReason.trim().length === 0) {
+    return next(new Error("Return reason is required", { cause: 400 }));
+  }
+  
   const order = await Order.findById(req.params.id);
   if (!order) return next(new Error("Order not found!", { cause: 404 }));
 
@@ -546,54 +576,64 @@ export const returnOrder = asyncHandler(async (req, res, next) => {
     return next(new Error("Order has already been returned", { cause: 400 }));
   }
 
-  // FIX: only restore stock if the deposit was confirmed (i.e. stock was actually
+  if (order.status === "cancelled") {
+    return next(new Error("Cannot return a cancelled order", { cause: 400 }));
+  }
+
+  // Only restore stock if the deposit was confirmed (i.e. stock was actually
   // decremented when the deposit was confirmed). Returning an unconfirmed order
   // should never touch stock.
+  let stockRestored = 0;
   if (order.depositConfirmed) {
-    for (const item of order.products) {
-      await Product.findByIdAndUpdate(item.productId, { $inc: { stock: item.quantity } });
+    try {
+      for (const item of order.products) {
+        await Product.findByIdAndUpdate(item.productId, { $inc: { stock: item.quantity } });
+      }
+      stockRestored = order.itemsCount || 0;
+    } catch (error) {
+      return next(new Error("Failed to restore stock during return process", { cause: 500 }));
     }
   }
 
   const returnAmount = order.totalPrice;
 
+  // Update order with return information
   order.isReturned = true;
   order.returnAmount = returnAmount;
-  order.returnReason = returnReason || "Customer return";
+  order.returnReason = returnReason.trim();
   order.returnDate = new Date();
   order.refundStatus = "pending";
-
-  // FIX 1: Set status to "returned" explicitly so the analytics reducer can
-  // block this order by status check alone — not just by isReturned flag.
-  // This is more robust and also handles edge cases where isReturned might
-  // be missed (e.g. legacy orders, direct DB queries).
-  order.status = "returned";
-
-  // FIX 1 (cont): Use "deposit_returned" for ALL returned orders regardless of
-  // prior payment status. Previously, fully-paid orders (paymentStatus "completed")
-  // would keep that status after return, causing their deposit to still be counted
-  // in totalDeposits inside getFinanceAnalytics.
-  order.paymentStatus = "deposit_returned";
+  order.status = "returned"; // Explicit status for analytics
+  order.paymentStatus = "deposit_returned"; // Consistent payment status for returned orders
 
   await order.save();
 
   res.json({
     success: true,
-    message: "Order returned successfully" + (order.depositConfirmed ? " and stock restored" : ""),
+    message: `Order returned successfully${stockRestored > 0 ? ` and ${stockRestored} items restored to stock` : ""}`,
     data: {
       orderId: order._id,
       returnAmount: returnAmount.toFixed(2),
       returnReason: order.returnReason,
       refundStatus: order.refundStatus,
-      stockRestored: order.depositConfirmed ? order.itemsCount : 0,
+      stockRestored,
+      returnDate: order.returnDate,
     },
   });
 });
 
-
 // PATCH /api/orders/:id/exchange — swap products within an existing order
 export const exchangeOrderProducts = asyncHandler(async (req, res, next) => {
   const { exchangeItems, exchangeReason } = req.body;
+
+  // Validation
+  if (!exchangeItems || !Array.isArray(exchangeItems) || exchangeItems.length === 0) {
+    return next(new Error("Exchange items array is required", { cause: 400 }));
+  }
+  
+  if (!exchangeReason || exchangeReason.trim().length === 0) {
+    return next(new Error("Exchange reason is required", { cause: 400 }));
+  }
 
   // exchangeItems: [{ originalLineItemId, newProductId, quantity, newColor, newSize }]
   //
@@ -608,11 +648,28 @@ export const exchangeOrderProducts = asyncHandler(async (req, res, next) => {
 
   if (order.isExchanged) {
     return next(
-      new Error("Cannot exchange order already been exchanged before", {
+      new Error("Cannot exchange order that has already been exchanged before", {
         cause: 403,
       })
     );
   }
+  
+  if (order.isReturned) {
+    return next(
+      new Error("Cannot exchange products on a returned order", {
+        cause: 400,
+      })
+    );
+  }
+  
+  if (order.status === "cancelled") {
+    return next(
+      new Error("Cannot exchange products on a cancelled order", {
+        cause: 400,
+      })
+    );
+  }
+  
   if (!order.depositConfirmed) {
     return next(
       new Error("Cannot exchange products on an order whose deposit has not been confirmed", {

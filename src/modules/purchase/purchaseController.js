@@ -5,10 +5,20 @@ import { asyncHandler } from "../../utils/asyncHandler.js";
 export const createPurchase = asyncHandler(async (req, res, next) => {
   const { supplier, products, paymentMethod, notes } = req.body;
 
+  // Validation
+  if (!supplier || !products || !Array.isArray(products) || products.length === 0) {
+    return next(new Error("Supplier and products array are required", { cause: 400 }));
+  }
+
   let totalCost = 0;
   const purchaseProducts = [];
+  const stockUpdates = [];
 
   for (const item of products) {
+    if (!item.productId) {
+      return next(new Error("Product ID is required for each purchase item", { cause: 400 }));
+    }
+
     const product = await Product.findById(item.productId);
     if (!product) {
       return next(new Error(`Product with ID ${item.productId} not found`, { cause: 404 }));
@@ -17,29 +27,55 @@ export const createPurchase = asyncHandler(async (req, res, next) => {
     const quantity = item.quantity || 1;
     const costPrice = item.costPrice;
 
-    totalCost += quantity * costPrice;
+    if (quantity <= 0) {
+      return next(new Error(`Invalid quantity for product ${product.name}. Must be greater than 0`, { cause: 400 }));
+    }
+
+    if (costPrice <= 0) {
+      return next(new Error(`Invalid cost price for product ${product.name}. Must be greater than 0`, { cause: 400 }));
+    }
+
+    const itemTotalCost = quantity * costPrice;
+    totalCost += itemTotalCost;
 
     purchaseProducts.push({
       productId: item.productId,
       quantity,
       costPrice,
-      totalCost: quantity * costPrice,
+      totalCost: itemTotalCost,
     });
 
-    // Update product stock and buyPrice
-    await Product.findByIdAndUpdate(item.productId, {
-      $inc: { stock: quantity },
-      buyPrice: costPrice, // Update buyPrice to latest
+    // Prepare stock updates for batch processing
+    stockUpdates.push({
+      productId: item.productId,
+      quantity,
+      costPrice,
     });
   }
 
+  // Create purchase first
   const purchase = await Purchase.create({
     supplier,
     products: purchaseProducts,
     totalCost,
-    paymentMethod,
+    paymentMethod: paymentMethod || "cash",
     notes,
+    date: new Date(),
   });
+
+  // Update product stock and buyPrice in batch
+  try {
+    for (const update of stockUpdates) {
+      await Product.findByIdAndUpdate(update.productId, {
+        $inc: { stock: update.quantity },
+        buyPrice: update.costPrice,
+      });
+    }
+  } catch (error) {
+    // If stock update fails, delete the purchase to maintain data integrity
+    await Purchase.findByIdAndDelete(purchase._id);
+    return next(new Error("Failed to update product stock. Purchase rolled back.", { cause: 500 }));
+  }
 
   res.status(201).json({
     success: true,
@@ -101,11 +137,29 @@ export const deletePurchase = asyncHandler(async (req, res, next) => {
   const purchase = await Purchase.findById(req.params.id);
   if (!purchase) return next(new Error("Purchase not found!", { cause: 404 }));
 
-  // Restore stock
+  // Check if we can safely restore stock (prevent negative stock)
+  const stockChecks = [];
   for (const item of purchase.products) {
-    await Product.findByIdAndUpdate(item.productId, { $inc: { stock: -item.quantity } });
+    const product = await Product.findById(item.productId);
+    if (!product) {
+      return next(new Error(`Product with ID ${item.productId} not found during deletion`, { cause: 404 }));
+    }
+    
+    if (product.stock < item.quantity) {
+      return next(new Error(`Cannot delete purchase: Insufficient stock to restore for product ${product.name}. Required: ${item.quantity}, Available: ${product.stock}`, { cause: 400 }));
+    }
+    stockChecks.push({ productId: item.productId, quantity: item.quantity });
+  }
+
+  // Restore stock
+  try {
+    for (const check of stockChecks) {
+      await Product.findByIdAndUpdate(check.productId, { $inc: { stock: -check.quantity } });
+    }
+  } catch (error) {
+    return next(new Error("Failed to restore product stock during purchase deletion", { cause: 500 }));
   }
 
   await purchase.deleteOne();
-  res.json({ success: true, message: "Purchase deleted successfully" });
+  res.json({ success: true, message: "Purchase deleted successfully and stock restored" });
 });
