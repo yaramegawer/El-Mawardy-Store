@@ -28,6 +28,7 @@ class TreasuryService {
         totalCost: previousTreasury?.totalCost || 0,
         totalExpenses: previousTreasury?.totalExpenses || 0,
         totalPurchases: previousTreasury?.totalPurchases || 0,
+        totalRealizedProfit: previousTreasury?.totalRealizedProfit || 0,
         totalTreasury: previousTreasury?.totalTreasury || 0,
       });
     }
@@ -140,6 +141,7 @@ class TreasuryService {
       treasury.totalCost = previousTreasury.totalCost + treasury.dailyCost;
       treasury.totalExpenses = previousTreasury.totalExpenses + treasury.dailyExpenses;
       treasury.totalPurchases = previousTreasury.totalPurchases + treasury.dailyPurchases;
+      treasury.totalRealizedProfit = previousTreasury.totalRealizedProfit + treasury.dailyRealizedProfit;
       treasury.totalTreasury = previousTreasury.totalTreasury + treasury.dailyTreasury;
     } else {
       // First day - use daily values as totals
@@ -147,6 +149,7 @@ class TreasuryService {
       treasury.totalCost = treasury.dailyCost;
       treasury.totalExpenses = treasury.dailyExpenses;
       treasury.totalPurchases = treasury.dailyPurchases;
+      treasury.totalRealizedProfit = treasury.dailyRealizedProfit;
       treasury.totalTreasury = treasury.dailyTreasury;
     }
     
@@ -174,6 +177,7 @@ class TreasuryService {
           totalCost: 0,
           totalExpenses: 0,
           totalPurchases: 0,
+          totalRealizedProfit: 0,
           totalTreasury: 0,
         },
         summary: {
@@ -196,6 +200,7 @@ class TreasuryService {
         totalCost: acc.totalCost + record.dailyCost,
         totalExpenses: acc.totalExpenses + record.dailyExpenses,
         totalPurchases: acc.totalPurchases + record.dailyPurchases,
+        totalRealizedProfit: acc.totalRealizedProfit + record.dailyRealizedProfit,
         totalTreasury: acc.totalTreasury + record.dailyTreasury,
         ordersCreated: acc.ordersCreated + record.ordersCreated,
         ordersDelivered: acc.ordersDelivered + record.ordersDelivered,
@@ -208,6 +213,7 @@ class TreasuryService {
       totalCost: 0,
       totalExpenses: 0,
       totalPurchases: 0,
+      totalRealizedProfit: 0,
       totalTreasury: 0,
       ordersCreated: 0,
       ordersDelivered: 0,
@@ -288,6 +294,7 @@ class TreasuryService {
         day.ordersDelivered += 1;
         day.dailyRevenue += order.priceWithoutShipping || 0;
         day.dailyCost += order.totalCost || 0; // COGS
+        day.dailyRealizedProfit += order.realizedProfit || 0;
         
         // Calculate profit metrics
         day.dailyGrossProfit = day.dailyRevenue - day.dailyCost;
@@ -376,8 +383,9 @@ class TreasuryService {
       const dayData = groupedByDate[dateKey];
       const date = new Date(dateKey);
       
-      dayData.dailyNetProfit = dayData.dailyRevenue - dayData.dailyCost - dayData.dailyExpenses;
-      dayData.dailyTreasury = dayData.dailyNetProfit;
+      dayData.dailyEstimatedProfit = dayData.dailyRevenue - dayData.dailyCost;
+      dayData.dailyNetProfit = dayData.dailyRealizedProfit - dayData.dailyExpenses;
+      dayData.dailyTreasury = dayData.dailyRealizedProfit - dayData.dailyExpenses - dayData.dailyPurchases;
       
       // Calculate cumulative totals with proper financial logic
       if (previousTreasury) {
@@ -385,13 +393,15 @@ class TreasuryService {
         dayData.totalCost = previousTreasury.totalCost + dayData.dailyCost;
         dayData.totalExpenses = previousTreasury.totalExpenses + dayData.dailyExpenses;
         dayData.totalPurchases = previousTreasury.totalPurchases + dayData.dailyPurchases;
+        dayData.totalRealizedProfit = previousTreasury.totalRealizedProfit + dayData.dailyRealizedProfit;
         dayData.totalTreasury = previousTreasury.totalTreasury + dayData.dailyNetProfit; // Use net profit for treasury
       } else {
         dayData.totalRevenue = dayData.dailyRevenue;
         dayData.totalCost = dayData.dailyCost;
         dayData.totalExpenses = dayData.dailyExpenses;
         dayData.totalPurchases = dayData.dailyPurchases;
-          dayData.totalTreasury = dayData.dailyNetProfit; // Use net profit for treasury
+        dayData.totalRealizedProfit = dayData.dailyRealizedProfit;
+        dayData.totalTreasury = dayData.dailyNetProfit; // Use net profit for treasury
       }
       
       const treasury = await Treasury.create({

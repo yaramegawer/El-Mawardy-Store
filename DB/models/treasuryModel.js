@@ -23,7 +23,8 @@ const treasurySchema = new Schema(
     totalCost: { type: Number, default: 0 }, // Total cost of goods sold to date
     totalExpenses: { type: Number, default: 0 }, // Total operating expenses to date
     totalPurchases: { type: Number, default: 0 }, // Total purchases to date
-        totalTreasury: { type: Number, default: 0 }, // Net cash position (assets - liabilities)
+    totalRealizedProfit: { type: Number, default: 0 }, // Total realized profit to date
+    totalTreasury: { type: Number, default: 0 }, // Net cash position (assets - liabilities)
     
     // Order counts
     ordersCreated: { type: Number, default: 0 }, // Orders created today

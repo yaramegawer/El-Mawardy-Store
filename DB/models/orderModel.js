@@ -33,9 +33,11 @@ const orderSchema = new Schema(
     totalPrice:    { type: Number, required: true }, // itemsPrice - totalDiscount + shippingCost
     totalCost:     { type: Number, required: true }, // sum of (costPrice × qty)
     
-    // ── Financial Metrics ──────────────────────────────────────────────
+    // ── Financial Metrics ──────────────────────────────────────────────────────
     // Revenue = itemsPrice - totalDiscount (product sales only, excl. shipping)
     // Shipping is a service fee, not product revenue
+    estimatedProfit: { type: Number, required: true }, // calculated at creation: (itemsPrice - totalDiscount) - totalCost
+    realizedProfit:  { type: Number, default: null }, // set only when status becomes "delivered"
     
     itemsCount:    { type: Number, required: true }, // total units across all line items
 
