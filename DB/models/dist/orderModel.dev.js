@@ -158,7 +158,7 @@ var orderSchema = new _mongoose.Schema({
   // set true by moderator via confirm-deposit
   status: {
     type: String,
-    "enum": ["pending", "confirmed", "shipped", "delivered", "cancelled"],
+    "enum": ["pending", "confirmed", "shipped", "delivered", "cancelled", "returned"],
     "default": "pending"
   },
   source: {
