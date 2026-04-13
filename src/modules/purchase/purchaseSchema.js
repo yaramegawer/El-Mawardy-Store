@@ -5,8 +5,7 @@ export const createPurchaseSchema = Joi.object({
   products: Joi.array().items(
     Joi.object({
       productId: Joi.string().required(),
-      quantity: Joi.number().integer().min(1).required(),
-      costPrice: Joi.number().positive().required(),
+
     })
   ).required(),
   paymentMethod: Joi.string().valid("cash", "vodafone_cash", "bank").default("cash"),
