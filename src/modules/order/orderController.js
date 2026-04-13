@@ -352,15 +352,15 @@ export const getFinanceAnalytics = asyncHandler(async (req, res, next) => {
 
   const productBreakdown = Object.values(summary.products).sort((a, b) => b.revenue - a.revenue);
 
-  // New Financial Rules Implementation
-  // Net Profit = Total realized profit from delivered orders minus total expenses (excluding purchases)
-  // Purchases are treated as assets, not losses
-  const netProfit = summary.totalRealizedProfit - totalExpenses;
+  // Final Financial Rules Implementation
+  // Net Profit = Only realized profit from delivered orders (NO expenses or purchases)
+  // This represents pure business profitability from sales only
+  const netProfit = summary.totalRealizedProfit;
   
   // Gross Profit = Revenue - Cost of Goods Sold
   const grossProfit = summary.totalRevenue - summary.totalCost;
   
-  // Operating Profit = Gross Profit - Operating Expenses
+  // Operating Profit = Gross Profit - Operating Expenses (for reporting only)
   const operatingProfit = grossProfit - totalExpenses;
   
   // Calculate today's date for daily treasury
@@ -389,22 +389,20 @@ export const getFinanceAnalytics = asyncHandler(async (req, res, next) => {
   const todayExpenses = expenses.filter(exp => exp.date >= today && exp.date < tomorrow);
   const todayOperatingExpenses = todayExpenses.reduce((sum, exp) => sum + exp.amount, 0);
 
-  // Today's purchases for daily treasury
-  const todayPurchases = purchases.filter(pur => pur.date >= today && pur.date < tomorrow);
-  const todayPurchaseCost = todayPurchases.reduce((sum, pur) => sum + pur.totalCost, 0);
-
-  // Daily Treasury: Today's realized profit - today's expenses - today's purchases
+  // Daily Treasury: Today's realized profit - today's expenses (can be negative)
+  // Expenses are deducted from Daily Treasury, purchases are NOT
   const todayRealizedProfit = todayOrders.reduce((sum, order) => {
     if (order.status === "delivered") {
       return sum + (order.realizedProfit || 0);
     }
     return sum;
   }, 0);
-  const dailyTreasury = todayRealizedProfit - todayOperatingExpenses - todayPurchaseCost;
+  const dailyTreasury = todayRealizedProfit - todayOperatingExpenses;
 
-  // Total Treasury: Total realized profit - total expenses - total purchases
-  // Purchases are treated as assets but deducted from treasury (cash position)
-  const totalTreasury = summary.totalRealizedProfit - totalExpenses - totalPurchases;
+  // Total Treasury: Accumulated cash balance over time
+  // Affected by: daily treasury adjustments (at midnight) + purchases deduction only
+  // Expenses are NOT deducted from Total Treasury (only from Daily Treasury)
+  const totalTreasury = summary.totalRealizedProfit - totalPurchases;
 
   res.json({
     success: true,
