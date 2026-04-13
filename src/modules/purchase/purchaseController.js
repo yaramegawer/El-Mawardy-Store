@@ -3,70 +3,56 @@ import { Product } from "../../../DB/models/productModel.js";
 import { asyncHandler } from "../../utils/asyncHandler.js";
 
 export const createPurchase = asyncHandler(async (req, res, next) => {
-  const { supplier, products, paymentMethod, notes } = req.body;
+  const { supplier, paymentMethod, notes } = req.body;
 
-  // Validation
-  if (!supplier || !products || !Array.isArray(products) || products.length === 0) {
-    return next(new Error("Supplier and products array are required", { cause: 400 }));
+  // Validation - only require supplier now
+  if (!supplier || !supplier.trim()) {
+    return next(new Error("Supplier is required", { cause: 400 }));
+  }
+
+  // Auto-calculate purchases from all products with stock > 0
+  const productsWithStock = await Product.find({ 
+    stock: { $gt: 0 },
+    buyPrice: { $gt: 0 } // Only include products with valid buyPrice
+  });
+
+  if (!productsWithStock || productsWithStock.length === 0) {
+    return next(new Error("No products found with stock greater than 0 and valid buy price", { cause: 400 }));
   }
 
   let totalCost = 0;
   const purchaseProducts = [];
-  const stockUpdates = [];
 
-  for (const item of products) {
-    if (!item.productId) {
-      return next(new Error("Product ID is required for each purchase item", { cause: 400 }));
-    }
-
-    const product = await Product.findById(item.productId);
-    if (!product) {
-      return next(new Error(`Product with ID ${item.productId} not found`, { cause: 404 }));
-    }
-
-    const quantity = item.stock || 1;
-    let costPrice = item.buyPrice;
-
-
-
-    // Fallback: if buyPrice not provided, use product's current buyPrice
-    if (costPrice == null || costPrice === undefined || costPrice === '') {
-      if (product.buyPrice && product.buyPrice > 0) {
-        costPrice = product.buyPrice;
-        console.log(`Using product's current buyPrice as fallback: ${costPrice}`);
-      } else {
-        return next(new Error(`Buy price is required for product ${product.name}. Product's current buyPrice is also not set or is 0.`, { cause: 400 }));
-      }
-    }
-
-    // Convert to number if it's a string
-    if (typeof costPrice === 'string') {
-      costPrice = parseFloat(costPrice);
-      if (isNaN(costPrice)) {
-        return next(new Error(`Invalid buy price format for product ${product.name}. Must be a valid number.`, { cause: 400 }));
-      }
-    }
+  for (const product of productsWithStock) {
+    const quantity = product.stock || 1;
+    const costPrice = product.buyPrice;
 
     if (quantity <= 0) {
-      return next(new Error(`Invalid stock quantity for product ${product.name}. Must be greater than 0`, { cause: 400 }));
+      console.log(`Skipping product ${product.name} - invalid stock quantity: ${quantity}`);
+      continue;
     }
 
     if (costPrice <= 0) {
-      return next(new Error(`Invalid buy price for product ${product.name}. Must be greater than 0. Received: ${costPrice}`, { cause: 400 }));
+      console.log(`Skipping product ${product.name} - invalid buy price: ${costPrice}`);
+      continue;
     }
 
     const itemTotalCost = quantity * costPrice;
     totalCost += itemTotalCost;
 
     purchaseProducts.push({
-      productId: item.productId,
+      productId: product._id,
       quantity,
       costPrice,
       totalCost: itemTotalCost,
     });
   }
 
-  // Create purchase record only (no stock updates since products are managed manually)
+  if (purchaseProducts.length === 0) {
+    return next(new Error("No valid products found for purchase calculation", { cause: 400 }));
+  }
+
+  // Create purchase record
   const purchase = await Purchase.create({
     supplier,
     products: purchaseProducts,
