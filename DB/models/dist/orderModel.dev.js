@@ -29,10 +29,6 @@ var orderSchema = new _mongoose.Schema({
     required: true
   },
   products: [{
-    // _id is declared explicitly with a default so Mongoose always generates
-    // one — even for subdocuments pushed as plain objects during exchanges.
-    // The exchange controller looks up line items by _id.toString() comparison,
-    // so a missing or undefined _id means the item can never be found.
     _id: {
       type: _mongoose.Types.ObjectId,
       "default": function _default() {
@@ -57,7 +53,6 @@ var orderSchema = new _mongoose.Schema({
       type: Number,
       "default": 0
     },
-    // snapshot discount %
     discountAmount: {
       type: Number,
       "default": 0
@@ -93,7 +88,6 @@ var orderSchema = new _mongoose.Schema({
     type: Number,
     "default": 0
   },
-  // sum of (discountAmount × qty)
   totalPrice: {
     type: Number,
     required: true
@@ -106,27 +100,19 @@ var orderSchema = new _mongoose.Schema({
   // sum of (costPrice × qty)
   // ── Financial Metrics ──────────────────────────────────────────────────────
   // Revenue = itemsPrice - totalDiscount (product sales only, excl. shipping)
-  // Shipping is a service fee, not product revenue
-  estimatedProfit: {
-    type: Number,
-    required: true
-  },
-  // calculated at creation: (itemsPrice - totalDiscount) - totalCost
+  // realizedProfit is set only when status becomes "delivered"
   realizedProfit: {
     type: Number,
     "default": null
   },
-  // set only when status becomes "delivered"
   itemsCount: {
     type: Number,
     required: true
   },
-  // total units across all line items
   depositAmount: {
     type: Number,
     required: true
   },
-  // 50% of totalPrice
   depositPaymentMethod: {
     type: String,
     "enum": ["vodafone_cash"],
@@ -136,7 +122,6 @@ var orderSchema = new _mongoose.Schema({
     type: Number,
     required: true
   },
-  // totalPrice - depositAmount (adjusts after exchange)
   duePaymentMethod: {
     type: String,
     "enum": ["vodafone_cash", "cash_on_delivery"],
@@ -155,10 +140,9 @@ var orderSchema = new _mongoose.Schema({
     type: Boolean,
     "default": false
   },
-  // set true by moderator via confirm-deposit
   status: {
     type: String,
-    "enum": ["pending", "confirmed", "shipped", "delivered", "cancelled"],
+    "enum": ["pending", "confirmed", "shipped", "delivered", "cancelled", "returned"],
     "default": "pending"
   },
   source: {
@@ -197,11 +181,6 @@ var orderSchema = new _mongoose.Schema({
     type: Boolean,
     "default": false
   },
-  // FIX: fields aligned with what the controller pushes.
-  // Old schema had only originalPrice / newPrice (post-discount numbers stored
-  // under ambiguous names). Controller now stores full price breakdown so the
-  // dashboard can display pre-discount prices, discount %, and final prices.
-  // Old stale field `exchangeProductId` (single ObjectId, never written) removed.
   exchangedProducts: [{
     originalProductId: {
       type: _mongoose.Types.ObjectId,
@@ -214,11 +193,9 @@ var orderSchema = new _mongoose.Schema({
     quantity: {
       type: Number
     },
-    // Original line item prices at time of exchange
     originalSellingPrice: {
       type: Number
     },
-    // pre-discount selling price per unit
     originalDiscountPct: {
       type: Number,
       "default": 0
@@ -226,12 +203,9 @@ var orderSchema = new _mongoose.Schema({
     originalFinalPrice: {
       type: Number
     },
-    // post-discount price per unit (what was charged)
-    // Replacement product prices at time of exchange
     newSellingPrice: {
       type: Number
     },
-    // pre-discount selling price per unit
     newDiscountPct: {
       type: Number,
       "default": 0
@@ -239,8 +213,6 @@ var orderSchema = new _mongoose.Schema({
     newFinalPrice: {
       type: Number
     },
-    // post-discount price per unit (what will be charged)
-    // (newFinalPrice - originalFinalPrice) × quantity — positive means customer owes more
     priceAdjustment: {
       type: Number,
       "default": 0
@@ -250,7 +222,9 @@ var orderSchema = new _mongoose.Schema({
       "default": Date.now
     }
   }],
-  priceWithoutShipping: Number,
+  priceWithoutShipping: {
+    type: Number
+  },
   exchangeReason: {
     type: String
   }

@@ -10,15 +10,11 @@ const orderSchema = new Schema(
 
     products: [
       {
-        // _id is declared explicitly with a default so Mongoose always generates
-        // one — even for subdocuments pushed as plain objects during exchanges.
-        // The exchange controller looks up line items by _id.toString() comparison,
-        // so a missing or undefined _id means the item can never be found.
         _id:                { type: Types.ObjectId, default: () => new Types.ObjectId() },
         productId:          { type: Types.ObjectId, ref: "Product", required: true },
         quantity:           { type: Number, required: true },
         price:              { type: Number, required: true },  // snapshot selling price (pre-discount)
-        discountPercentage: { type: Number, default: 0 },      // snapshot discount %
+        discountPercentage: { type: Number, default: 0 },
         discountAmount:     { type: Number, default: 0 },      // discount amount per unit
         finalPrice:         { type: Number, required: true },  // selling price after discount
         costPrice:          { type: Number, required: true },  // snapshot buy price
@@ -29,30 +25,29 @@ const orderSchema = new Schema(
 
     shippingCost:  { type: Number, required: true },
     itemsPrice:    { type: Number, required: true }, // sum of (price × qty) before discount
-    totalDiscount: { type: Number, default: 0 },     // sum of (discountAmount × qty)
+    totalDiscount: { type: Number, default: 0 },
     totalPrice:    { type: Number, required: true }, // itemsPrice - totalDiscount + shippingCost
     totalCost:     { type: Number, required: true }, // sum of (costPrice × qty)
-    
+
     // ── Financial Metrics ──────────────────────────────────────────────────────
     // Revenue = itemsPrice - totalDiscount (product sales only, excl. shipping)
-    // Shipping is a service fee, not product revenue
-    estimatedProfit: { type: Number, required: true }, // calculated at creation: (itemsPrice - totalDiscount) - totalCost
-    realizedProfit:  { type: Number, default: null }, // set only when status becomes "delivered"
-    
-    itemsCount:    { type: Number, required: true }, // total units across all line items
+    // realizedProfit is set only when status becomes "delivered"
+    realizedProfit: { type: Number, default: null },
 
-    depositAmount:        { type: Number, required: true },                                   // 50% of totalPrice
+    itemsCount: { type: Number, required: true },
+
+    depositAmount:        { type: Number, required: true },
     depositPaymentMethod: { type: String, enum: ["vodafone_cash"], required: true },
-    dueAmount:            { type: Number, required: true },                                   // totalPrice - depositAmount (adjusts after exchange)
+    dueAmount:            { type: Number, required: true },
     duePaymentMethod:     { type: String, enum: ["vodafone_cash", "cash_on_delivery"], required: true },
 
     orderDate:        { type: Date, default: Date.now },
     paymentStatus:    { type: String, enum: ["pending", "deposit_sent", "completed", "deposit_returned"], default: "pending" },
-    depositConfirmed: { type: Boolean, default: false }, // set true by moderator via confirm-deposit
+    depositConfirmed: { type: Boolean, default: false },
 
     status: {
       type: String,
-      enum: ["pending", "confirmed", "shipped", "delivered", "cancelled"],
+      enum: ["pending", "confirmed", "shipped", "delivered", "cancelled", "returned"],
       default: "pending",
     },
 
@@ -70,36 +65,24 @@ const orderSchema = new Schema(
     // ── Exchanges ──────────────────────────────────────────────────────────────
     isExchanged: { type: Boolean, default: false },
 
-    // FIX: fields aligned with what the controller pushes.
-    // Old schema had only originalPrice / newPrice (post-discount numbers stored
-    // under ambiguous names). Controller now stores full price breakdown so the
-    // dashboard can display pre-discount prices, discount %, and final prices.
-    // Old stale field `exchangeProductId` (single ObjectId, never written) removed.
     exchangedProducts: [
       {
-        originalProductId:   { type: Types.ObjectId, ref: "Product" },
-        newProductId:        { type: Types.ObjectId, ref: "Product" },
-        quantity:            { type: Number },
-
-        // Original line item prices at time of exchange
-        originalSellingPrice: { type: Number }, // pre-discount selling price per unit
+        originalProductId:    { type: Types.ObjectId, ref: "Product" },
+        newProductId:         { type: Types.ObjectId, ref: "Product" },
+        quantity:             { type: Number },
+        originalSellingPrice: { type: Number },
         originalDiscountPct:  { type: Number, default: 0 },
-        originalFinalPrice:   { type: Number }, // post-discount price per unit (what was charged)
-
-        // Replacement product prices at time of exchange
-        newSellingPrice: { type: Number }, // pre-discount selling price per unit
-        newDiscountPct:  { type: Number, default: 0 },
-        newFinalPrice:   { type: Number }, // post-discount price per unit (what will be charged)
-
-        // (newFinalPrice - originalFinalPrice) × quantity — positive means customer owes more
-        priceAdjustment: { type: Number, default: 0 },
-
-        exchangeDate: { type: Date, default: Date.now },
+        originalFinalPrice:   { type: Number },
+        newSellingPrice:      { type: Number },
+        newDiscountPct:       { type: Number, default: 0 },
+        newFinalPrice:        { type: Number },
+        priceAdjustment:      { type: Number, default: 0 },
+        exchangeDate:         { type: Date, default: Date.now },
       },
     ],
-    priceWithoutShipping:Number,
 
-    exchangeReason: { type: String },
+    priceWithoutShipping: { type: Number },
+    exchangeReason:       { type: String },
   },
   { timestamps: true }
 );
