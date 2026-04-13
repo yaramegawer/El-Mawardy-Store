@@ -77,10 +77,14 @@ export const createPurchase = asyncHandler(async (req, res, next) => {
     return next(new Error("Failed to update product stock. Purchase rolled back.", { cause: 500 }));
   }
 
+  // Fetch the purchase with populated product details for the response
+  const populatedPurchase = await Purchase.findById(purchase._id)
+    .populate("products.productId", "name price buyPrice stock discount");
+
   res.status(201).json({
     success: true,
     message: "Purchase created successfully",
-    data: purchase,
+    data: populatedPurchase,
   });
 });
 
@@ -99,7 +103,7 @@ export const getAllPurchases = asyncHandler(async (req, res, next) => {
   const skip = (page - 1) * limit;
 
   const [purchases, total] = await Promise.all([
-    Purchase.find(filter).populate("products.productId", "name").sort({ createdAt: -1 }).skip(skip).limit(limit),
+    Purchase.find(filter).populate("products.productId", "name price buyPrice stock discount").sort({ createdAt: -1 }).skip(skip).limit(limit),
     Purchase.countDocuments(filter),
   ]);
 
@@ -112,7 +116,7 @@ export const getAllPurchases = asyncHandler(async (req, res, next) => {
 });
 
 export const getPurchaseById = asyncHandler(async (req, res, next) => {
-  const purchase = await Purchase.findById(req.params.id).populate("products.productId", "name");
+  const purchase = await Purchase.findById(req.params.id).populate("products.productId", "name price buyPrice stock discount");
   if (!purchase) return next(new Error("Purchase not found!", { cause: 404 }));
 
   res.json({ success: true, message: "Purchase retrieved successfully", data: purchase });
@@ -126,7 +130,7 @@ export const updatePurchase = asyncHandler(async (req, res, next) => {
     req.params.id,
     { supplier, paymentMethod, notes },
     { new: true }
-  );
+  ).populate("products.productId", "name price buyPrice stock discount");
 
   if (!purchase) return next(new Error("Purchase not found!", { cause: 404 }));
 
