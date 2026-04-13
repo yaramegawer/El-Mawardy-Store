@@ -25,7 +25,30 @@ export const createPurchase = asyncHandler(async (req, res, next) => {
     }
 
     const quantity = item.quantity || 1;
-    const costPrice = item.costPrice;
+    // Accept both costPrice and buyPrice from frontend for flexibility
+    let costPrice = item.costPrice || item.buyPrice;
+
+    // Debug logging to identify the issue
+    console.log('Purchase Item Debug:', {
+      productId: item.productId,
+      productName: product.name,
+      quantity: quantity,
+      costPrice: costPrice,
+      buyPrice: item.buyPrice,
+      costPriceType: typeof costPrice,
+      itemData: item,
+      productBuyPrice: product.buyPrice
+    });
+
+    // Fallback: if costPrice not provided, use product's current buyPrice
+    if (costPrice == null || costPrice === undefined || costPrice === '') {
+      if (product.buyPrice && product.buyPrice > 0) {
+        costPrice = product.buyPrice;
+        console.log(`Using product's current buyPrice as fallback: ${costPrice}`);
+      } else {
+        return next(new Error(`Cost price is required for product ${product.name}. Product's current buyPrice is also not set or is 0.`, { cause: 400 }));
+      }
+    }
 
     if (quantity <= 0) {
       return next(new Error(`Invalid quantity for product ${product.name}. Must be greater than 0`, { cause: 400 }));
