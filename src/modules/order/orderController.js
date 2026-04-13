@@ -397,8 +397,13 @@ export const getFinanceAnalytics = asyncHandler(async (req, res, next) => {
   // Daily Treasury: Today's Revenue - Today's COGS - Today's Operating Expenses
   const dailyTreasury = todayRevenue - todayCOGS - todayOperatingExpenses;
 
-  // Total Treasury: Cumulative cash position (Net Assets)
-  const totalTreasury = netProfit;
+  // Total Treasury: Cumulative net cash position (all time profit - all expenses)
+  // This should include all historical data, not just the filtered period
+  const allExpensesData = await Expense.find();
+  const allPurchasesData = await Purchase.find();
+  const allTimeExpenses = allExpensesData.reduce((sum, exp) => sum + exp.amount, 0);
+  const allTimePurchases = allPurchasesData.reduce((sum, pur) => sum + pur.totalCost, 0);
+  const totalTreasury = netProfit - allTimeExpenses - allTimePurchases;
 
   res.json({
     success: true,
