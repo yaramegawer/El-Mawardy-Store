@@ -4,7 +4,11 @@ const expenseSchema = new Schema(
   {
     description: { type: String, required: true },
     amount: { type: Number, required: true },
-    category: { type: String, required: true }, // e.g., "vodafone_cash", "shipping", "utilities", etc.
+    category: { 
+      type: String, 
+      required: true,
+      enum: ["rent", "utilities", "marketing", "salaries", "supplies", "maintenance", "other_operating"] // Operating expenses only
+    },
     date: { type: Date, default: Date.now },
     paymentMethod: { type: String, enum: ["vodafone_cash", "cash", "bank"], default: "cash" },
     notes: { type: String },

@@ -352,9 +352,22 @@ export const getFinanceAnalytics = asyncHandler(async (req, res, next) => {
 
   const productBreakdown = Object.values(summary.products).sort((a, b) => b.revenue - a.revenue);
 
-  // Realized profit is the final net profit for actual performance metrics
-  const netProfit = summary.totalRealizedProfit - totalExpenses;
-
+  // Proper Financial Logic Implementation
+  // COGS (Cost of Goods Sold) = totalCost from orders
+  const cogs = summary.totalCost;
+  
+  // Operating Expenses = totalExpenses (excluding purchases which are COGS)
+  const operatingExpenses = totalExpenses;
+  
+  // Gross Profit = Revenue - COGS
+  const grossProfit = summary.totalRevenue - cogs;
+  
+  // Operating Profit = Gross Profit - Operating Expenses  
+  const operatingProfit = grossProfit - operatingExpenses;
+  
+  // Net Profit = Operating Profit - Other Costs (purchases are already in COGS)
+  const netProfit = operatingProfit; // Already includes all necessary deductions
+  
   // Calculate today's date for daily treasury
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -363,27 +376,29 @@ export const getFinanceAnalytics = asyncHandler(async (req, res, next) => {
 
   // Today's orders for daily treasury
   const todayOrders = orders.filter(order => order.orderDate >= today && order.orderDate < tomorrow);
-  const todayRealizedProfit = todayOrders.reduce((sum, order) => {
+  const todayRevenue = todayOrders.reduce((sum, order) => {
     if (order.status === "delivered") {
-      return sum + (order.realizedProfit || 0);
+      return sum + (order.priceWithoutShipping || 0);
+    }
+    return sum;
+  }, 0);
+  
+  const todayCOGS = todayOrders.reduce((sum, order) => {
+    if (order.status === "delivered") {
+      return sum + (order.totalCost || 0);
     }
     return sum;
   }, 0);
 
-  // Today's expenses
+  // Today's operating expenses
   const todayExpenses = expenses.filter(exp => exp.date >= today && exp.date < tomorrow);
-  const todayExpensesTotal = todayExpenses.reduce((sum, exp) => sum + exp.amount, 0);
+  const todayOperatingExpenses = todayExpenses.reduce((sum, exp) => sum + exp.amount, 0);
 
-  // Daily treasury: today's profits - today's expenses (can be negative)
-  const dailyTreasury = todayRealizedProfit - todayExpensesTotal;
+  // Daily Treasury: Today's Revenue - Today's COGS - Today's Operating Expenses
+  const dailyTreasury = todayRevenue - todayCOGS - todayOperatingExpenses;
 
-  // Total treasury: all realized profits - all expenses - all purchases
-  const totalTreasury = summary.totalRealizedProfit - totalExpenses - totalPurchases;
-
-  // Additional profit calculations for consistency
-  const grossProfit = summary.totalRevenue - summary.totalCost;
-  const operatingProfit = grossProfit - totalExpenses;
-  const netProfitCalculated = operatingProfit - totalPurchases;
+  // Total Treasury: Cumulative cash position (Net Assets)
+  const totalTreasury = netProfit;
 
   res.json({
     success: true,
@@ -407,27 +422,13 @@ export const getFinanceAnalytics = asyncHandler(async (req, res, next) => {
       operatingProfit: operatingProfit, // Gross Profit - Operating Expenses
       totalEstimatedProfit: summary.totalEstimatedProfit, // Expected profit from all orders
       totalRealizedProfit: summary.totalRealizedProfit, // Actual profit from delivered orders
-      netProfit: netProfitCalculated, // Final profit after all costs
+      netProfit: netProfit, // Final profit after all costs
       totalProfit: summary.totalRealizedProfit, // Backwards compatibility
       
       // Financial movements
       totalReturns: summary.totalReturns,
       totalDeposits: summary.totalDeposits,
       totalCancelledProfit: summary.totalCancelledProfit,
-      
-      // Treasury metrics
-      dailyTreasury: dailyTreasury, // Today's net profit
-      totalTreasury: totalTreasury, // Cumulative treasury balance
-      
-      // Performance metrics
-      depositPercentage: summary.totalRevenue ? (summary.totalDeposits / summary.totalRevenue) * 100 : 0,
-      profitMargin: summary.totalRevenue ? (netProfitCalculated / summary.totalRevenue) * 100 : 0,
-      averageProfitPerItem: summary.totalItemsSold ? summary.totalRealizedProfit / summary.totalItemsSold : 0,
-      averageProfitPerOrder: summary.totalOrders ? summary.totalRealizedProfit / summary.totalOrders : 0,
-      
-      // Detailed breakdowns
-      productBreakdown,
-      expenses: expenses,
       purchases: purchases,
     },
   });

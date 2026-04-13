@@ -113,13 +113,23 @@ class TreasuryService {
   }
 
   /**
-   * Recalculate all treasury totals
+   * Recalculate all treasury totals using proper financial logic
    */
   static async recalculateTreasuryTotals(treasury) {
-    // Calculate daily metrics
-    treasury.dailyEstimatedProfit = treasury.dailyRevenue - treasury.dailyCost;
-    treasury.dailyNetProfit = treasury.dailyRealizedProfit - treasury.dailyExpenses;
-    treasury.dailyTreasury = treasury.dailyRealizedProfit - treasury.dailyExpenses - treasury.dailyPurchases;
+    // Proper Financial Logic: Net Profit = Revenue - COGS - Operating Expenses
+    // Daily Treasury tracks actual cash position and cash flow
+    
+    // Gross Profit = Revenue - Cost of Goods Sold (COGS)
+    treasury.dailyGrossProfit = treasury.dailyRevenue - treasury.dailyCost;
+    
+    // Operating Profit = Gross Profit - Operating Expenses
+    treasury.dailyOperatingProfit = treasury.dailyGrossProfit - treasury.dailyExpenses;
+    
+    // Net Profit = Operating Profit (purchases are already included in COGS)
+    treasury.dailyNetProfit = treasury.dailyOperatingProfit;
+    
+    // Daily Treasury = Net Profit (actual cash position for the day)
+    treasury.dailyTreasury = treasury.dailyNetProfit;
     
     // Update cumulative totals
     const yesterday = new Date(treasury.date);
@@ -250,7 +260,7 @@ class TreasuryService {
     // Group by date
     const groupedByDate = {};
     
-    // Process orders
+    // Process orders with proper financial calculations
     orders.forEach(order => {
       const date = new Date(order.orderDate);
       date.setHours(0, 0, 0, 0);
@@ -263,11 +273,15 @@ class TreasuryService {
           ordersCancelled: 0,
           ordersReturned: 0,
           dailyRevenue: 0,
-          dailyShipping: 0,
-          dailyCost: 0,
+          dailyCost: 0, // COGS
+          dailyExpenses: 0, // Operating expenses
           dailyDeposits: 0,
           dailyReturns: 0,
           dailyRealizedProfit: 0,
+          dailyGrossProfit: 0,
+          dailyOperatingProfit: 0,
+          dailyNetProfit: 0,
+          dailyTreasury: 0,
           transactionCount: 0,
         };
       }
@@ -279,9 +293,14 @@ class TreasuryService {
       if (order.status === "delivered") {
         day.ordersDelivered += 1;
         day.dailyRevenue += order.priceWithoutShipping || 0;
-        day.dailyShipping += order.shippingCost || 0;
-        day.dailyCost += order.totalCost || 0;
+        day.dailyCost += order.totalCost || 0; // COGS
         day.dailyRealizedProfit += order.realizedProfit || 0;
+        
+        // Calculate profit metrics
+        day.dailyGrossProfit = day.dailyRevenue - day.dailyCost;
+        day.dailyOperatingProfit = day.dailyGrossProfit - day.dailyExpenses;
+        day.dailyNetProfit = day.dailyOperatingProfit; // Final net profit
+        day.dailyTreasury = day.dailyNetProfit; // Cash position
       }
       
       if (order.status === "cancelled") {
@@ -298,7 +317,7 @@ class TreasuryService {
       }
     });
     
-    // Process expenses
+    // Process expenses (operating expenses)
     expenses.forEach(expense => {
       const date = new Date(expense.date);
       date.setHours(0, 0, 0, 0);
@@ -311,12 +330,15 @@ class TreasuryService {
           ordersCancelled: 0,
           ordersReturned: 0,
           dailyRevenue: 0,
-          dailyShipping: 0,
-          dailyCost: 0,
+          dailyCost: 0, // COGS
+          dailyExpenses: 0, // Operating expenses
           dailyDeposits: 0,
           dailyReturns: 0,
           dailyRealizedProfit: 0,
-          dailyExpenses: 0,
+          dailyGrossProfit: 0,
+          dailyOperatingProfit: 0,
+          dailyNetProfit: 0,
+          dailyTreasury: 0,
           transactionCount: 0,
         };
       }
@@ -365,21 +387,21 @@ class TreasuryService {
       dayData.dailyNetProfit = dayData.dailyRealizedProfit - dayData.dailyExpenses;
       dayData.dailyTreasury = dayData.dailyRealizedProfit - dayData.dailyExpenses - dayData.dailyPurchases;
       
-      // Calculate cumulative totals
+      // Calculate cumulative totals with proper financial logic
       if (previousTreasury) {
         dayData.totalRevenue = previousTreasury.totalRevenue + dayData.dailyRevenue;
         dayData.totalCost = previousTreasury.totalCost + dayData.dailyCost;
         dayData.totalExpenses = previousTreasury.totalExpenses + dayData.dailyExpenses;
         dayData.totalPurchases = previousTreasury.totalPurchases + dayData.dailyPurchases;
         dayData.totalRealizedProfit = previousTreasury.totalRealizedProfit + dayData.dailyRealizedProfit;
-        dayData.totalTreasury = previousTreasury.totalTreasury + dayData.dailyTreasury;
+        dayData.totalTreasury = previousTreasury.totalTreasury + dayData.dailyNetProfit; // Use net profit for treasury
       } else {
         dayData.totalRevenue = dayData.dailyRevenue;
         dayData.totalCost = dayData.dailyCost;
         dayData.totalExpenses = dayData.dailyExpenses;
         dayData.totalPurchases = dayData.dailyPurchases;
         dayData.totalRealizedProfit = dayData.dailyRealizedProfit;
-        dayData.totalTreasury = dayData.dailyTreasury;
+        dayData.totalTreasury = dayData.dailyNetProfit; // Use net profit for treasury
       }
       
       const treasury = await Treasury.create({

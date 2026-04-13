@@ -6,26 +6,25 @@ const treasurySchema = new Schema(
     
     // Daily financial metrics
     dailyRevenue: { type: Number, default: 0 }, // Revenue from orders (excluding shipping)
-    dailyShipping: { type: Number, default: 0 }, // Shipping fees collected
-    dailyCost: { type: Number, default: 0 }, // Cost of goods sold
+    dailyCost: { type: Number, default: 0 }, // Cost of goods sold (COGS)
     dailyExpenses: { type: Number, default: 0 }, // Operating expenses
-    dailyPurchases: { type: Number, default: 0 }, // Purchase costs
+    dailyPurchases: { type: Number, default: 0 }, // Purchase costs (already in COGS)
     dailyDeposits: { type: Number, default: 0 }, // Deposits received
     dailyReturns: { type: Number, default: 0 }, // Returns/refunds processed
     
-    // Profit calculations
-    dailyEstimatedProfit: { type: Number, default: 0 }, // Estimated profit from orders
-    dailyRealizedProfit: { type: Number, default: 0 }, // Profit from delivered orders
-    dailyNetProfit: { type: Number, default: 0 }, // Net profit after expenses
-    dailyTreasury: { type: Number, default: 0 }, // Daily treasury balance
+    // Profit calculations (proper financial logic)
+    dailyGrossProfit: { type: Number, default: 0 }, // Revenue - COGS
+    dailyOperatingProfit: { type: Number, default: 0 }, // Gross Profit - Operating Expenses
+    dailyNetProfit: { type: Number, default: 0 }, // Operating Profit (final net profit)
+    dailyTreasury: { type: Number, default: 0 }, // Net Profit (actual cash position)
     
     // Cumulative metrics
     totalRevenue: { type: Number, default: 0 }, // Total revenue to date
-    totalCost: { type: Number, default: 0 }, // Total cost to date
-    totalExpenses: { type: Number, default: 0 }, // Total expenses to date
+    totalCost: { type: Number, default: 0 }, // Total cost of goods sold to date
+    totalExpenses: { type: Number, default: 0 }, // Total operating expenses to date
     totalPurchases: { type: Number, default: 0 }, // Total purchases to date
-    totalRealizedProfit: { type: Number, default: 0 }, // Total realized profit
-    totalTreasury: { type: Number, default: 0 }, // Total treasury balance
+    totalRealizedProfit: { type: Number, default: 0 }, // Total realized profit to date
+    totalTreasury: { type: Number, default: 0 }, // Net cash position (assets - liabilities)
     
     // Order counts
     ordersCreated: { type: Number, default: 0 }, // Orders created today
