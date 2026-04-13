@@ -7,7 +7,7 @@ const userSchema=new Schema({
     forgetCode:{type:String,length:5},
     role: {
     type: String,
-    enum: ["user", "admin"],
+    enum: ["user","cashier", "admin"],
     default: "user"
     }
 },{timestamps:true});
