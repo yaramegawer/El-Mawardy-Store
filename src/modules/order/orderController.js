@@ -615,6 +615,10 @@ export const returnOrder = asyncHandler(async (req, res, next) => {
   order.status = "returned"; // Explicit status for analytics
   order.paymentStatus = "deposit_returned"; // Consistent payment status for returned orders
 
+  // Set realizedProfit to negative of total price to subtract from net profit
+  // This ensures the total price is removed from net profit calculations when returned
+  order.realizedProfit = -Math.abs(returnAmount);
+
   await order.save();
 
   res.json({
