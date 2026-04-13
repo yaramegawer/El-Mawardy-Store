@@ -1,0 +1,20 @@
+import Joi from "joi";
+
+export const createPurchaseSchema = Joi.object({
+  supplier: Joi.string().required(),
+  products: Joi.array().items(
+    Joi.object({
+      productId: Joi.string().required(),
+      quantity: Joi.number().integer().min(1).required(),
+      costPrice: Joi.number().positive().required(),
+    })
+  ).required(),
+  paymentMethod: Joi.string().valid("cash", "vodafone_cash", "bank").default("cash"),
+  notes: Joi.string(),
+});
+
+export const updatePurchaseSchema = Joi.object({
+  supplier: Joi.string(),
+  paymentMethod: Joi.string().valid("cash", "vodafone_cash", "bank"),
+  notes: Joi.string(),
+});

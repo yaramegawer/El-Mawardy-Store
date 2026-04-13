@@ -49,7 +49,6 @@ const orderSchema = new Schema(
     orderDate:        { type: Date, default: Date.now },
     paymentStatus:    { type: String, enum: ["pending", "deposit_sent", "completed", "deposit_returned"], default: "pending" },
     depositConfirmed: { type: Boolean, default: false }, // set true by moderator via confirm-deposit
-    paymentProof:     { type: String },                  // image URL, optional
 
     status: {
       type: String,

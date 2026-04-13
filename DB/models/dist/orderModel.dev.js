@@ -156,10 +156,6 @@ var orderSchema = new _mongoose.Schema({
     "default": false
   },
   // set true by moderator via confirm-deposit
-  paymentProof: {
-    type: String
-  },
-  // image URL, optional
   status: {
     type: String,
     "enum": ["pending", "confirmed", "shipped", "delivered", "cancelled"],

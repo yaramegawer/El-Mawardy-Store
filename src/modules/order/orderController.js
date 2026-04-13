@@ -7,6 +7,9 @@
 
 import { Order } from "../../../DB/models/orderModel.js";
 import { Product } from "../../../DB/models/productModel.js";
+import { Expense } from "../../../DB/models/expenseModel.js";
+import { Treasury } from "../../../DB/models/treasuryModel.js";
+import { Purchase } from "../../../DB/models/purchaseModel.js";
 import { asyncHandler } from "../../utils/asyncHandler.js";
 import { Types } from "mongoose";
 
@@ -190,6 +193,31 @@ export const getFinanceAnalytics = asyncHandler(async (req, res, next) => {
     if (endDate) filter.orderDate.$lte = new Date(endDate);
   }
   const orders = await Order.find(filter).populate("products.productId", "name");
+
+  // Query expenses with date filter
+  const expenseFilter = {};
+  if (startDate || endDate) {
+    expenseFilter.date = {};
+    if (startDate) expenseFilter.date.$gte = new Date(startDate);
+    if (endDate) expenseFilter.date.$lte = new Date(endDate);
+  }
+  const expenses = await Expense.find(expenseFilter);
+
+  // Query purchases with date filter
+  const purchaseFilter = {};
+  if (startDate || endDate) {
+    purchaseFilter.date = {};
+    if (startDate) purchaseFilter.date.$gte = new Date(startDate);
+    if (endDate) purchaseFilter.date.$lte = new Date(endDate);
+  }
+  const purchases = await Purchase.find(purchaseFilter);
+
+  // Calculate total expenses
+  const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
+
+  // Calculate total purchases cost
+  const totalPurchases = purchases.reduce((sum, pur) => sum + pur.totalCost, 0);
+
   const summary = orders.reduce(
     (acc, order) => {
       // 1. ADD RETURNS & DEPOSITS (We do this for ALL orders)
@@ -309,7 +337,32 @@ export const getFinanceAnalytics = asyncHandler(async (req, res, next) => {
   const productBreakdown = Object.values(summary.products).sort((a, b) => b.revenue - a.revenue);
 
   // Realized profit is the final net profit for actual performance metrics
-  const netProfit = summary.totalRealizedProfit;
+  const netProfit = summary.totalRealizedProfit - totalExpenses;
+
+  // Calculate today's date for daily treasury
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  // Today's orders for daily treasury
+  const todayOrders = orders.filter(order => order.orderDate >= today && order.orderDate < tomorrow);
+  const todayRealizedProfit = todayOrders.reduce((sum, order) => {
+    if (order.status === "delivered") {
+      return sum + (order.realizedProfit || 0);
+    }
+    return sum;
+  }, 0);
+
+  // Today's expenses
+  const todayExpenses = expenses.filter(exp => exp.date >= today && exp.date < tomorrow);
+  const todayExpensesTotal = todayExpenses.reduce((sum, exp) => sum + exp.amount, 0);
+
+  // Daily treasury: today's profits - today's expenses (can be negative)
+  const dailyTreasury = todayRealizedProfit - todayExpensesTotal;
+
+  // Total treasury: all realized profits - all expenses - all purchases
+  const totalTreasury = summary.totalRealizedProfit - totalExpenses - totalPurchases;
 
   res.json({
     success: true,
@@ -324,16 +377,22 @@ export const getFinanceAnalytics = asyncHandler(async (req, res, next) => {
       totalRealizedProfit: summary.totalRealizedProfit,
       totalProfit: summary.totalRealizedProfit, // Backwards compatibility for anything still using totalProfit
       totalCancelledProfit: summary.totalCancelledProfit, // Track profit we missed out on
-      netProfit: netProfit, // Actual realized profit
+      netProfit: netProfit, // Realized profit minus expenses
       totalItemsSold: summary.totalItemsSold,
       totalReturns: summary.totalReturns,
       totalDeposits: summary.totalDeposits,
+      totalExpenses: totalExpenses,
+      totalPurchases: totalPurchases,
+      dailyTreasury: dailyTreasury, // Today's profits - today's expenses
+      totalTreasury: totalTreasury, // All profits - all expenses - purchases
       depositPercentage: summary.totalRevenue ? (summary.totalDeposits / summary.totalRevenue) * 100 : 0,
       averageOrderValue: summary.totalOrders ? summary.totalRevenue / summary.totalOrders : 0,
       averageProfitPerItem: summary.totalItemsSold
         ? summary.totalRealizedProfit / summary.totalItemsSold
         : 0,
       productBreakdown,
+      expenses: expenses, // Detailed expenses
+      purchases: purchases, // Detailed purchases
     },
   });
 });
