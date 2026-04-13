@@ -404,9 +404,13 @@ export const getFinanceAnalytics = asyncHandler(async (req, res, next) => {
     success: true,
     message: "Finance analytics retrieved successfully",
     data: {
-      // Order metrics
-      totalOrders: summary.totalOrders,
-      totalItemsSold: summary.totalItemsSold,
+      // Treasury metrics (calculated directly from finance data)
+      dailyTreasury: dailyTreasury, // Today's net profit (cash position)
+      totalTreasury: totalTreasury, // Cumulative net cash position
+      grossProfit: grossProfit, // Revenue - COGS
+      operatingProfit: operatingProfit, // Gross Profit - Operating Expenses
+      
+      // Performance metrics
       averageOrderValue: summary.totalOrders ? summary.totalRevenue / summary.totalOrders : 0,
       
       // Revenue and costs
