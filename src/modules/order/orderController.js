@@ -223,8 +223,17 @@ export const getFinanceAnalytics = asyncHandler(async (req, res, next) => {
       // 1. ADD RETURNS & DEPOSITS (We do this for ALL orders)
       acc.totalReturns += order.returnAmount || 0;
 
-      // Only count deposits that are still owed (not returned/refunded)
-      if (order.depositConfirmed && order.source !== "store" && order.status !== "cancelled" && order.paymentStatus !== "deposit_returned") {
+      // FIX 2: Added !order.isReturned guard so fully-paid returned orders don't
+      // keep their deposit counted. Previously only paymentStatus "deposit_returned"
+      // was checked, which missed orders whose paymentStatus was "completed" at
+      // the time of return (full-payment orders).
+      if (
+        order.depositConfirmed &&
+        order.source !== "store" &&
+        order.status !== "cancelled" &&
+        !order.isReturned &&
+        order.paymentStatus !== "deposit_returned"
+      ) {
         acc.totalDeposits += order.depositAmount || 0;
       }
 
@@ -234,8 +243,10 @@ export const getFinanceAnalytics = asyncHandler(async (req, res, next) => {
         return acc; // Skip revenue calculations for cancelled orders
       }
 
-      // 3. BLOCK PENDING OR FULLY RETURNED ORDERS FROM REVENUE
-      if (order.isReturned || order.status === "pending") {
+      // 3. BLOCK PENDING, RETURNED, OR FULLY RETURNED ORDERS FROM REVENUE
+      // FIX 1: returnOrder now sets status to "returned", so this check also
+      // catches returned orders by status — not just by isReturned flag alone.
+      if (order.isReturned || order.status === "pending" || order.status === "returned") {
         return acc;
       }
 
@@ -552,10 +563,17 @@ export const returnOrder = asyncHandler(async (req, res, next) => {
   order.returnDate = new Date();
   order.refundStatus = "pending";
 
-  // If deposit was confirmed, mark payment status as deposit_returned for tracking
-  if (order.depositConfirmed && order.paymentStatus !== "deposit_returned") {
-    order.paymentStatus = "deposit_returned";
-  }
+  // FIX 1: Set status to "returned" explicitly so the analytics reducer can
+  // block this order by status check alone — not just by isReturned flag.
+  // This is more robust and also handles edge cases where isReturned might
+  // be missed (e.g. legacy orders, direct DB queries).
+  order.status = "returned";
+
+  // FIX 1 (cont): Use "deposit_returned" for ALL returned orders regardless of
+  // prior payment status. Previously, fully-paid orders (paymentStatus "completed")
+  // would keep that status after return, causing their deposit to still be counted
+  // in totalDeposits inside getFinanceAnalytics.
+  order.paymentStatus = "deposit_returned";
 
   await order.save();
 
@@ -767,10 +785,15 @@ export const exchangeOrderProducts = asyncHandler(async (req, res, next) => {
   order.totalPrice = newTotalPrice;
   order.priceWithoutShipping = newItemsRevenue; // Update revenue field
 
-  // UPDATE PROFIT: recalculate estimatedProfit after exchange
-  // Reset realizedProfit since order specs changed (will be recalculated if delivered)
+  // FIX 3: Re-lock realizedProfit immediately if the order is already delivered
+  // instead of setting it to null and relying on the analytics reducer's fallback.
+  // This makes the intent explicit and avoids any ambiguity in the reducer path.
   order.estimatedProfit = newItemsRevenue - recalcTotalCost;
-  order.realizedProfit = null; // Reset realized profit, will be set again when delivered
+  if (order.status === "delivered") {
+    order.realizedProfit = order.estimatedProfit;
+  } else {
+    order.realizedProfit = null; // Will be set again when delivered
+  }
 
   // depositAmount stays locked — the customer already paid it.
   // dueAmount absorbs the full price delta from the exchange.
