@@ -4,19 +4,46 @@ import { asyncHandler } from "../../utils/asyncHandler.js";
 export const createExpense = asyncHandler(async (req, res, next) => {
   const { description, amount, category, paymentMethod, notes } = req.body;
 
-  const expense = await Expense.create({
-    description,
-    amount,
-    category,
-    paymentMethod,
-    notes,
-  });
+  // Validation
+  if (!description || description.trim().length === 0) {
+    return next(new Error("Description is required", { cause: 400 }));
+  }
 
-  res.status(201).json({
-    success: true,
-    message: "Expense created successfully",
-    data: expense,
-  });
+  if (!amount || isNaN(amount) || amount <= 0) {
+    return next(new Error("Valid amount is required", { cause: 400 }));
+  }
+
+  const validCategories = ["rent", "utilities", "marketing", "salaries", "supplies", "maintenance", "shipping", "ads", "vodafone_cash", "other_operating"];
+  if (!category || !validCategories.includes(category)) {
+    return next(new Error(`Invalid category. Valid categories: ${validCategories.join(", ")}`, { cause: 400 }));
+  }
+
+  const validPaymentMethods = ["vodafone_cash", "cash", "bank"];
+  if (paymentMethod && !validPaymentMethods.includes(paymentMethod)) {
+    return next(new Error(`Invalid payment method. Valid methods: ${validPaymentMethods.join(", ")}`, { cause: 400 }));
+  }
+
+  try {
+    const expense = await Expense.create({
+      description: description.trim(),
+      amount: parseFloat(amount),
+      category,
+      paymentMethod: paymentMethod || "cash",
+      notes: notes ? notes.trim() : undefined,
+    });
+
+    res.status(201).json({
+      success: true,
+      message: "Expense created successfully",
+      data: expense,
+    });
+  } catch (error) {
+    if (error.name === 'ValidationError') {
+      const validationErrors = Object.values(error.errors).map(err => err.message);
+      return next(new Error(`Validation failed: ${validationErrors.join(", ")}`, { cause: 400 }));
+    }
+    return next(new Error("Failed to create expense. Please try again.", { cause: 500 }));
+  }
 });
 
 export const getAllExpenses = asyncHandler(async (req, res, next) => {

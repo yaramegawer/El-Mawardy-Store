@@ -352,21 +352,16 @@ export const getFinanceAnalytics = asyncHandler(async (req, res, next) => {
 
   const productBreakdown = Object.values(summary.products).sort((a, b) => b.revenue - a.revenue);
 
-  // Proper Financial Logic Implementation
-  // COGS (Cost of Goods Sold) = totalCost from orders
-  const cogs = summary.totalCost;
+  // New Financial Rules Implementation
+  // Net Profit = Total realized profit from delivered orders minus total expenses (excluding purchases)
+  // Purchases are treated as assets, not losses
+  const netProfit = summary.totalRealizedProfit - totalExpenses;
   
-  // Operating Expenses = totalExpenses (excluding purchases which are COGS)
-  const operatingExpenses = totalExpenses;
+  // Gross Profit = Revenue - Cost of Goods Sold
+  const grossProfit = summary.totalRevenue - summary.totalCost;
   
-  // Gross Profit = Revenue - COGS
-  const grossProfit = summary.totalRevenue - cogs;
-  
-  // Operating Profit = Gross Profit - Operating Expenses  
-  const operatingProfit = grossProfit - operatingExpenses;
-  
-  // Net Profit = Operating Profit - Other Costs (purchases are already in COGS)
-  const netProfit = operatingProfit; // Already includes all necessary deductions
+  // Operating Profit = Gross Profit - Operating Expenses
+  const operatingProfit = grossProfit - totalExpenses;
   
   // Calculate today's date for daily treasury
   const today = new Date();
@@ -394,16 +389,22 @@ export const getFinanceAnalytics = asyncHandler(async (req, res, next) => {
   const todayExpenses = expenses.filter(exp => exp.date >= today && exp.date < tomorrow);
   const todayOperatingExpenses = todayExpenses.reduce((sum, exp) => sum + exp.amount, 0);
 
-  // Daily Treasury: Today's Revenue - Today's COGS - Today's Operating Expenses
-  const dailyTreasury = todayRevenue - todayCOGS - todayOperatingExpenses;
+  // Today's purchases for daily treasury
+  const todayPurchases = purchases.filter(pur => pur.date >= today && pur.date < tomorrow);
+  const todayPurchaseCost = todayPurchases.reduce((sum, pur) => sum + pur.totalCost, 0);
 
-  // Total Treasury: Cumulative net cash position (all time profit - all expenses)
-  // This should include all historical data, not just the filtered period
-  const allExpensesData = await Expense.find();
-  const allPurchasesData = await Purchase.find();
-  const allTimeExpenses = allExpensesData.reduce((sum, exp) => sum + exp.amount, 0);
-  const allTimePurchases = allPurchasesData.reduce((sum, pur) => sum + pur.totalCost, 0);
-  const totalTreasury = netProfit - allTimeExpenses - allTimePurchases;
+  // Daily Treasury: Today's realized profit - today's expenses - today's purchases
+  const todayRealizedProfit = todayOrders.reduce((sum, order) => {
+    if (order.status === "delivered") {
+      return sum + (order.realizedProfit || 0);
+    }
+    return sum;
+  }, 0);
+  const dailyTreasury = todayRealizedProfit - todayOperatingExpenses - todayPurchaseCost;
+
+  // Total Treasury: Total realized profit - total expenses - total purchases
+  // Purchases are treated as assets but deducted from treasury (cash position)
+  const totalTreasury = summary.totalRealizedProfit - totalExpenses - totalPurchases;
 
   res.json({
     success: true,
