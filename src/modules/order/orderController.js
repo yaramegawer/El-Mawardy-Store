@@ -256,9 +256,11 @@ export const getFinanceAnalytics = asyncHandler(async (req, res) => {
       totalRealizedProfit += realProfit;
     }
 
-    // Handle returned orders - subtract total price from treasury
+    // Handle returned orders - subtract profit (not full price) to avoid double-counting
     if (order.isReturned || order.status === "returned") {
-      totalRealizedProfit -= (order.totalPrice || 0);
+      // Subtract the estimated profit that was previously counted
+      const returnedProfit = order.estimatedProfit || (revenue - cost);
+      totalRealizedProfit -= returnedProfit;
     }
   });
 
@@ -296,7 +298,9 @@ export const getFinanceAnalytics = asyncHandler(async (req, res) => {
                        todayPurchases.reduce((sum, pur) => sum + pur.totalCost, 0) +
                        todayOrders.reduce((sum, order) => {
                          if (order.isReturned || order.status === "returned") {
-                           return sum + (order.totalPrice || 0);
+                           // Use profit (not full price) to avoid double-counting
+                           const returnedProfit = order.estimatedProfit || ((order.priceWithoutShipping || 0) - (order.totalCost || 0));
+                           return sum + returnedProfit;
                          }
                          return sum;
                        }, 0);
