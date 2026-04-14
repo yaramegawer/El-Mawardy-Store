@@ -25,7 +25,7 @@ var createExpenseSchema = _joi["default"].object({
 exports.createExpenseSchema = createExpenseSchema;
 
 var updateExpenseSchema = _joi["default"].object({
-  id: joi.string().custom(isValidObjectId).required(),
+  id: _joi["default"].string().custom(isValidObjectId).required(),
   description: _joi["default"].string().trim().min(1),
   amount: _joi["default"].number().positive(),
   category: (_Joi$string3 = _joi["default"].string()).valid.apply(_Joi$string3, validCategories),

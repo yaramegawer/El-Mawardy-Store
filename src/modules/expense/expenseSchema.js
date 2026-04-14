@@ -12,7 +12,7 @@ export const createExpenseSchema = Joi.object({
 });
 
 export const updateExpenseSchema = Joi.object({
-  id:joi.string().custom(isValidObjectId).required(),
+  id:Joi.string().custom(isValidObjectId).required(),
   description: Joi.string().trim().min(1),
   amount: Joi.number().positive(),
   category: Joi.string().valid(...validCategories),
