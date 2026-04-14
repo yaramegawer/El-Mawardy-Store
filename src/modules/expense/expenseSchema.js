@@ -1,4 +1,5 @@
 import Joi from "joi";
+import { isValidObjectId } from "../../middlewares/validationMiddleware";
 
 const validCategories = ["rent", "utilities", "marketing", "salaries", "supplies", "maintenance", "shipping", "ads", "vodafone_cash", "other_operating"];
 const validPaymentMethods = ["vodafone_cash", "cash", "bank"];

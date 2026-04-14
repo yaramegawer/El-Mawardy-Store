@@ -7,6 +7,8 @@ exports.updateExpenseSchema = exports.createExpenseSchema = void 0;
 
 var _joi = _interopRequireDefault(require("joi"));
 
+var _validationMiddleware = require("../../middlewares/validationMiddleware");
+
 var _Joi$string, _Joi$string2, _Joi$string3, _Joi$string4;
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { "default": obj }; }
@@ -25,7 +27,7 @@ var createExpenseSchema = _joi["default"].object({
 exports.createExpenseSchema = createExpenseSchema;
 
 var updateExpenseSchema = _joi["default"].object({
-  id: _joi["default"].string().custom(isValidObjectId).required(),
+  id: _joi["default"].string().custom(_validationMiddleware.isValidObjectId).required(),
   description: _joi["default"].string().trim().min(1),
   amount: _joi["default"].number().positive(),
   category: (_Joi$string3 = _joi["default"].string()).valid.apply(_Joi$string3, validCategories),
