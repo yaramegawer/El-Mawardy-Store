@@ -271,6 +271,15 @@ export const getFinanceAnalytics = asyncHandler(async (req, res) => {
   // =============================
   const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
   const netProfit = grossProfit - totalExpenses;
+  
+  // Enhanced expense tracking by category
+  const expensesByCategory = expenses.reduce((acc, exp) => {
+    acc[exp.category] = (acc[exp.category] || 0) + exp.amount;
+    return acc;
+  }, {});
+  
+  // Calculate expense impact on profit
+  const expenseImpactRatio = grossProfit > 0 ? (totalExpenses / grossProfit * 100) : 0;
 
   // =============================
   // D. DAILY TREASURY/CASHBOOK: Opening balance, inflows, outflows, closing balance
@@ -373,6 +382,27 @@ export const getFinanceAnalytics = asyncHandler(async (req, res) => {
   const inventoryValue = products.reduce((sum, product) => {
     return sum + (product.stock * (product.buyPrice || 0));
   }, 0);
+  
+  // Enhanced inventory tracking
+  const inventoryDetails = products.reduce((acc, product) => {
+    const productValue = product.stock * (product.buyPrice || 0);
+    const sellingValue = product.stock * (product.price || 0);
+    const potentialProfit = sellingValue - productValue;
+    
+    acc.totalProducts += 1;
+    acc.totalStock += product.stock;
+    acc.totalInventoryValue += productValue;
+    acc.totalSellingValue += sellingValue;
+    acc.totalPotentialProfit += potentialProfit;
+    
+    return acc;
+  }, {
+    totalProducts: 0,
+    totalStock: 0,
+    totalInventoryValue: 0,
+    totalSellingValue: 0,
+    totalPotentialProfit: 0
+  });
 
   // =============================
   // RESPONSE WITH COMPREHENSIVE FINANCIAL DATA
@@ -403,6 +433,18 @@ export const getFinanceAnalytics = asyncHandler(async (req, res) => {
       
       // Goods Finance
       inventoryValue,        // Total inventory value (stock * purchase price)
+      
+      // NEW: Expense Impact Tracking
+      expensesByCategory,    // Expenses broken down by category
+      expenseImpactRatio,    // Percentage of expenses relative to gross profit
+      
+      // NEW: Enhanced Inventory Tracking
+      inventoryDetails,      // Detailed inventory metrics including potential profit
+      totalInventoryValue: inventoryDetails.totalInventoryValue,
+      totalSellingValue: inventoryDetails.totalSellingValue,
+      totalPotentialProfit: inventoryDetails.totalPotentialProfit,
+      totalProducts: inventoryDetails.totalProducts,
+      totalStock: inventoryDetails.totalStock,
       
       // Additional Metrics
       totalOrders: orders.filter(o => o.status !== "cancelled" && o.status !== "pending").length,
