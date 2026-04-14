@@ -271,18 +271,6 @@ export const getFinanceAnalytics = asyncHandler(async (req, res) => {
   const netProfit = grossProfit - totalExpenses;
 
   // =============================
-  // C. TREASURY MANAGEMENT: Current balance of cash/bank accounts
-  // =============================
-  const totalPurchases = purchases.reduce((sum, pur) => sum + pur.totalCost, 0);
-  
-  // All-time treasury: Accumulate all values over time
-  // Should include all historical sales, expenses, and purchases
-  const allTimeTreasury = totalRealizedProfit - totalExpenses - totalPurchases;
-  
-  // Current treasury balance: All-time treasury minus daily treasury movements
-  const treasuryBalance = allTimeTreasury - dailyTreasury;
-
-  // =============================
   // D. DAILY TREASURY/CASHBOOK: Opening balance, inflows, outflows, closing balance
   // =============================
   const today = new Date();
@@ -315,6 +303,18 @@ export const getFinanceAnalytics = asyncHandler(async (req, res) => {
 
   // Daily treasury calculation
   const dailyTreasury = todayInflow - todayOutflow;
+
+  // =============================
+  // C. TREASURY MANAGEMENT: Current balance of cash/bank accounts
+  // =============================
+  const totalPurchases = purchases.reduce((sum, pur) => sum + pur.totalCost, 0);
+  
+  // All-time treasury: Accumulate all values over time
+  // Should include all historical sales, expenses, and purchases
+  const allTimeTreasury = totalRealizedProfit - totalExpenses - totalPurchases;
+  
+  // Current treasury balance: All-time treasury minus daily treasury movements
+  const treasuryBalance = allTimeTreasury - dailyTreasury;
 
   // =============================
   // E. GOODS FINANCE: Inventory Value Tracking
