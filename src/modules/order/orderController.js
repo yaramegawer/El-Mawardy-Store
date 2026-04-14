@@ -259,8 +259,13 @@ export const getFinanceAnalytics = asyncHandler(async (req, res) => {
   // C. TREASURY MANAGEMENT: Current balance of cash/bank accounts
   // =============================
   const totalPurchases = purchases.reduce((sum, pur) => sum + pur.totalCost, 0);
-  // Treasury is affected by net profit, purchases (inventory), and returns
-  const treasuryBalance = netProfit - totalPurchases;
+  
+  // All-time treasury: Accumulate all values over time
+  // Should include all historical sales, expenses, and purchases
+  const allTimeTreasury = totalRealizedProfit - totalExpenses - totalPurchases;
+  
+  // Current treasury balance: All-time treasury minus daily treasury movements
+  const treasuryBalance = allTimeTreasury - dailyTreasury;
 
   // =============================
   // D. DAILY TREASURY/CASHBOOK: Opening balance, inflows, outflows, closing balance
@@ -317,7 +322,8 @@ export const getFinanceAnalytics = asyncHandler(async (req, res) => {
       totalRealizedProfit,   // Actual profit from delivered orders
       
       // Treasury Management
-      treasuryBalance,       // Current cash/bank balance
+      allTimeTreasury,       // All-time accumulated treasury balance
+      treasuryBalance,       // Current cash/bank balance (all-time minus daily)
       dailyTreasury,         // Today's net cash movement
       
       // Transaction Totals
