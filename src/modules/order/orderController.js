@@ -211,12 +211,27 @@ export const getFinanceAnalytics = asyncHandler(async (req, res) => {
   };
 
   // Fetch all data in parallel for better performance
-  const [orders, expenses, purchases, products] = await Promise.all([
-    Order.find(createDateFilter("orderDate")).populate("products.productId", "name buyPrice stock"),
+  let [orders, expenses, purchases, products] = await Promise.all([
+    Order.find(createDateFilter("createdAt")).populate("products.productId", "name buyPrice stock"),
     Expense.find(createDateFilter("date")),
     Purchase.find(createDateFilter("date")),
     Product.find()
   ]);
+
+  // If no orders found with date filter, fetch all orders
+  if (orders.length === 0) {
+    orders = await Order.find({}).populate("products.productId", "name buyPrice stock");
+  }
+  
+  // If no expenses found with date filter, fetch all expenses
+  if (expenses.length === 0) {
+    expenses = await Expense.find({});
+  }
+  
+  // If no purchases found with date filter, fetch all purchases
+  if (purchases.length === 0) {
+    purchases = await Purchase.find({});
+  }
 
   // =============================
   // A. GROSS PROFIT CALCULATION: Sales Revenue - COGS (Units Sold * Purchase Price)
@@ -276,7 +291,7 @@ export const getFinanceAnalytics = asyncHandler(async (req, res) => {
   tomorrow.setDate(tomorrow.getDate() + 1);
 
   // Today's transactions for daily treasury
-  const todayOrders = orders.filter(order => order.orderDate >= today && order.orderDate < tomorrow);
+  const todayOrders = orders.filter(order => order.createdAt >= today && order.createdAt < tomorrow);
   const todayExpenses = expenses.filter(exp => exp.date >= today && exp.date < tomorrow);
   const todayPurchases = purchases.filter(pur => pur.date >= today && pur.date < tomorrow);
 
