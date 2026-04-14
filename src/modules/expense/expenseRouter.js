@@ -7,7 +7,7 @@ import {
   deleteExpense,
 } from "./expenseController.js";
 import { validation } from "../../middlewares/validationMiddleware.js";
-import { createExpenseSchema, updateExpenseSchema } from "./expenseSchema.js";
+import { createExpenseSchema } from "./expenseSchema.js";
 
 const router = Router();
 
