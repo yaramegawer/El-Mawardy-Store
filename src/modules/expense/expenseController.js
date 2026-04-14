@@ -118,6 +118,7 @@ export const updateExpense = asyncHandler(async (req, res, next) => {
       { new: true, runValidators: true }
     );
 
+    
     if (!expense) return next(new Error("Expense not found!", { cause: 404 }));
 
     res.json({ success: true, message: "Expense updated successfully", data: expense });

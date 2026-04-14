@@ -18,36 +18,105 @@ function _iterableToArrayLimit(arr, i) { if (!(Symbol.iterator in Object(arr) ||
 function _arrayWithHoles(arr) { if (Array.isArray(arr)) return arr; }
 
 var createExpense = (0, _asyncHandler.asyncHandler)(function _callee(req, res, next) {
-  var _req$body, description, amount, category, paymentMethod, notes, expense;
+  var _req$body, description, amount, category, paymentMethod, notes, validCategories, validPaymentMethods, expense, validationErrors;
 
   return regeneratorRuntime.async(function _callee$(_context) {
     while (1) {
       switch (_context.prev = _context.next) {
         case 0:
-          _req$body = req.body, description = _req$body.description, amount = _req$body.amount, category = _req$body.category, paymentMethod = _req$body.paymentMethod, notes = _req$body.notes;
-          _context.next = 3;
-          return regeneratorRuntime.awrap(_expenseModel.Expense.create({
-            description: description,
-            amount: amount,
-            category: category,
-            paymentMethod: paymentMethod,
-            notes: notes
-          }));
+          _req$body = req.body, description = _req$body.description, amount = _req$body.amount, category = _req$body.category, paymentMethod = _req$body.paymentMethod, notes = _req$body.notes; // Validation
+
+          if (!(!description || description.trim().length === 0)) {
+            _context.next = 3;
+            break;
+          }
+
+          return _context.abrupt("return", next(new Error("Description is required", {
+            cause: 400
+          })));
 
         case 3:
+          if (!(!amount || isNaN(amount) || amount <= 0)) {
+            _context.next = 5;
+            break;
+          }
+
+          return _context.abrupt("return", next(new Error("Valid amount is required", {
+            cause: 400
+          })));
+
+        case 5:
+          validCategories = ["rent", "utilities", "marketing", "salaries", "supplies", "maintenance", "shipping", "ads", "vodafone_cash", "other_operating"];
+
+          if (!(!category || !validCategories.includes(category))) {
+            _context.next = 8;
+            break;
+          }
+
+          return _context.abrupt("return", next(new Error("Invalid category. Valid categories: ".concat(validCategories.join(", ")), {
+            cause: 400
+          })));
+
+        case 8:
+          validPaymentMethods = ["vodafone_cash", "cash", "bank"];
+
+          if (!(paymentMethod && !validPaymentMethods.includes(paymentMethod))) {
+            _context.next = 11;
+            break;
+          }
+
+          return _context.abrupt("return", next(new Error("Invalid payment method. Valid methods: ".concat(validPaymentMethods.join(", ")), {
+            cause: 400
+          })));
+
+        case 11:
+          _context.prev = 11;
+          _context.next = 14;
+          return regeneratorRuntime.awrap(_expenseModel.Expense.create({
+            description: description.trim(),
+            amount: parseFloat(amount),
+            category: category,
+            paymentMethod: paymentMethod || "cash",
+            notes: notes ? notes.trim() : undefined
+          }));
+
+        case 14:
           expense = _context.sent;
           res.status(201).json({
             success: true,
             message: "Expense created successfully",
             data: expense
           });
+          _context.next = 24;
+          break;
 
-        case 5:
+        case 18:
+          _context.prev = 18;
+          _context.t0 = _context["catch"](11);
+
+          if (!(_context.t0.name === 'ValidationError')) {
+            _context.next = 23;
+            break;
+          }
+
+          validationErrors = Object.values(_context.t0.errors).map(function (err) {
+            return err.message;
+          });
+          return _context.abrupt("return", next(new Error("Validation failed: ".concat(validationErrors.join(", ")), {
+            cause: 400
+          })));
+
+        case 23:
+          return _context.abrupt("return", next(new Error("Failed to create expense. Please try again.", {
+            cause: 500
+          })));
+
+        case 24:
         case "end":
           return _context.stop();
       }
     }
-  });
+  }, null, null, [[11, 18]]);
 });
 exports.createExpense = createExpense;
 var getAllExpenses = (0, _asyncHandler.asyncHandler)(function _callee2(req, res, next) {
@@ -72,7 +141,7 @@ var getAllExpenses = (0, _asyncHandler.asyncHandler)(function _callee2(req, res,
           skip = (page - 1) * limit;
           _context2.next = 9;
           return regeneratorRuntime.awrap(Promise.all([_expenseModel.Expense.find(filter).sort({
-            createdAt: -1
+            date: -1
           }).skip(skip).limit(limit), _expenseModel.Expense.countDocuments(filter)]));
 
         case 9:
@@ -136,29 +205,77 @@ var getExpenseById = (0, _asyncHandler.asyncHandler)(function _callee3(req, res,
 });
 exports.getExpenseById = getExpenseById;
 var updateExpense = (0, _asyncHandler.asyncHandler)(function _callee4(req, res, next) {
-  var _req$body2, description, amount, category, paymentMethod, notes, expense;
+  var _req$body2, description, amount, category, paymentMethod, notes, validCategories, validPaymentMethods, updateData, expense, validationErrors;
 
   return regeneratorRuntime.async(function _callee4$(_context4) {
     while (1) {
       switch (_context4.prev = _context4.next) {
         case 0:
-          _req$body2 = req.body, description = _req$body2.description, amount = _req$body2.amount, category = _req$body2.category, paymentMethod = _req$body2.paymentMethod, notes = _req$body2.notes;
-          _context4.next = 3;
-          return regeneratorRuntime.awrap(_expenseModel.Expense.findByIdAndUpdate(req.params.id, {
-            description: description,
-            amount: amount,
-            category: category,
-            paymentMethod: paymentMethod,
-            notes: notes
-          }, {
-            "new": true
-          }));
+          _req$body2 = req.body, description = _req$body2.description, amount = _req$body2.amount, category = _req$body2.category, paymentMethod = _req$body2.paymentMethod, notes = _req$body2.notes; // Validation
+
+          if (!(description && description.trim().length === 0)) {
+            _context4.next = 3;
+            break;
+          }
+
+          return _context4.abrupt("return", next(new Error("Description cannot be empty", {
+            cause: 400
+          })));
 
         case 3:
+          if (!(amount && (isNaN(amount) || amount <= 0))) {
+            _context4.next = 5;
+            break;
+          }
+
+          return _context4.abrupt("return", next(new Error("Valid amount is required", {
+            cause: 400
+          })));
+
+        case 5:
+          validCategories = ["rent", "utilities", "marketing", "salaries", "supplies", "maintenance", "shipping", "ads", "vodafone_cash", "other_operating"];
+
+          if (!(category && !validCategories.includes(category))) {
+            _context4.next = 8;
+            break;
+          }
+
+          return _context4.abrupt("return", next(new Error("Invalid category. Valid categories: ".concat(validCategories.join(", ")), {
+            cause: 400
+          })));
+
+        case 8:
+          validPaymentMethods = ["vodafone_cash", "cash", "bank"];
+
+          if (!(paymentMethod && !validPaymentMethods.includes(paymentMethod))) {
+            _context4.next = 11;
+            break;
+          }
+
+          return _context4.abrupt("return", next(new Error("Invalid payment method. Valid methods: ".concat(validPaymentMethods.join(", ")), {
+            cause: 400
+          })));
+
+        case 11:
+          // Prepare update object with only provided fields
+          updateData = {};
+          if (description !== undefined) updateData.description = description.trim();
+          if (amount !== undefined) updateData.amount = parseFloat(amount);
+          if (category !== undefined) updateData.category = category;
+          if (paymentMethod !== undefined) updateData.paymentMethod = paymentMethod;
+          if (notes !== undefined) updateData.notes = notes.trim() || undefined;
+          _context4.prev = 17;
+          _context4.next = 20;
+          return regeneratorRuntime.awrap(_expenseModel.Expense.findByIdAndUpdate(req.params.id, updateData, {
+            "new": true,
+            runValidators: true
+          }));
+
+        case 20:
           expense = _context4.sent;
 
           if (expense) {
-            _context4.next = 6;
+            _context4.next = 23;
             break;
           }
 
@@ -166,19 +283,42 @@ var updateExpense = (0, _asyncHandler.asyncHandler)(function _callee4(req, res, 
             cause: 404
           })));
 
-        case 6:
+        case 23:
           res.json({
             success: true,
             message: "Expense updated successfully",
             data: expense
           });
+          _context4.next = 32;
+          break;
 
-        case 7:
+        case 26:
+          _context4.prev = 26;
+          _context4.t0 = _context4["catch"](17);
+
+          if (!(_context4.t0.name === 'ValidationError')) {
+            _context4.next = 31;
+            break;
+          }
+
+          validationErrors = Object.values(_context4.t0.errors).map(function (err) {
+            return err.message;
+          });
+          return _context4.abrupt("return", next(new Error("Validation failed: ".concat(validationErrors.join(", ")), {
+            cause: 400
+          })));
+
+        case 31:
+          return _context4.abrupt("return", next(new Error("Failed to update expense. Please try again.", {
+            cause: 500
+          })));
+
+        case 32:
         case "end":
           return _context4.stop();
       }
     }
-  });
+  }, null, null, [[17, 26]]);
 });
 exports.updateExpense = updateExpense;
 var deleteExpense = (0, _asyncHandler.asyncHandler)(function _callee5(req, res, next) {
