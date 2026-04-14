@@ -313,6 +313,52 @@ export const getFinanceAnalytics = asyncHandler(async (req, res) => {
   // Should include all historical sales, expenses, and purchases
   const allTimeTreasury = totalRealizedProfit - totalExpenses - totalPurchases;
   
+  // Comprehensive debugging for all-time treasury calculation
+  console.log('=== ALL-TIME TREASURY DEBUG ===');
+  console.log('Orders count:', orders.length);
+  console.log('Expenses count:', expenses.length);
+  console.log('Purchases count:', purchases.length);
+  console.log('Products count:', products.length);
+  
+  console.log('ORDER BREAKDOWN:');
+  orders.forEach((order, index) => {
+    console.log(`Order ${index + 1}:`, {
+      id: order._id,
+      status: order.status,
+      isReturned: order.isReturned,
+      priceWithoutShipping: order.priceWithoutShipping,
+      totalCost: order.totalCost,
+      realizedProfit: order.realizedProfit,
+      totalPrice: order.totalPrice
+    });
+  });
+  
+  console.log('CALCULATION COMPONENTS:');
+  console.log('totalRealizedProfit:', totalRealizedProfit);
+  console.log('totalExpenses:', totalExpenses);
+  console.log('totalPurchases:', totalPurchases);
+  console.log('allTimeTreasury calculation:', `${totalRealizedProfit} - ${totalExpenses} - ${totalPurchases} = ${allTimeTreasury}`);
+  
+  console.log('EXPENSE BREAKDOWN:');
+  expenses.forEach((expense, index) => {
+    console.log(`Expense ${index + 1}:`, {
+      id: expense._id,
+      amount: expense.amount,
+      category: expense.category,
+      date: expense.date
+    });
+  });
+  
+  console.log('PURCHASE BREAKDOWN:');
+  purchases.forEach((purchase, index) => {
+    console.log(`Purchase ${index + 1}:`, {
+      id: purchase._id,
+      totalCost: purchase.totalCost,
+      date: purchase.date
+    });
+  });
+  console.log('=== END DEBUG ===');
+  
   // Current treasury balance: All-time treasury minus daily treasury movements
   const treasuryBalance = allTimeTreasury - dailyTreasury;
 
