@@ -14,7 +14,7 @@ const router = Router();
 router.post("/", validation(createExpenseSchema), createExpense);
 router.get("/", getAllExpenses);
 router.get("/:id", getExpenseById);
-router.patch("/:id", validation(updateExpenseSchema), updateExpense);
+router.patch("/:id",  updateExpense);
 router.delete("/:id", deleteExpense);
 
 export default router;

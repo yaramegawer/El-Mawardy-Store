@@ -12,11 +12,3 @@ export const createExpenseSchema = Joi.object({
   notes: Joi.string().trim().allow(""),
 });
 
-export const updateExpenseSchema = Joi.object({
-  id:Joi.string().custom(isValidObjectId).required(),
-  description: Joi.string().trim().min(1),
-  amount: Joi.number().positive(),
-  category: Joi.string().valid(...validCategories),
-  paymentMethod: Joi.string().valid(...validPaymentMethods),
-  notes: Joi.string().trim().allow(""),
-});
