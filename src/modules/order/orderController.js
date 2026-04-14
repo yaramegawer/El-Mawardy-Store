@@ -210,12 +210,10 @@ export const getFinanceAnalytics = asyncHandler(async (req, res) => {
     return filter;
   };
 
-  // Fetch all data in parallel for better performance
-  let [orders, expenses, purchases, products] = await Promise.all([
+  // Fetch only orders and expenses
+  let [orders, expenses] = await Promise.all([
     Order.find(createDateFilter("createdAt")).populate("products.productId", "name buyPrice stock"),
-    Expense.find(createDateFilter("date")),
-    Purchase.find(createDateFilter("date")),
-    Product.find()
+    Expense.find(createDateFilter("date"))
   ]);
 
   // If no orders found with date filter, fetch all orders
@@ -227,229 +225,40 @@ export const getFinanceAnalytics = asyncHandler(async (req, res) => {
   if (expenses.length === 0) {
     expenses = await Expense.find({});
   }
-  
-  // If no purchases found with date filter, fetch all purchases
-  if (purchases.length === 0) {
-    purchases = await Purchase.find({});
-  }
 
-  // =============================
-  // A. GROSS PROFIT CALCULATION: Sales Revenue - COGS (Units Sold * Purchase Price)
-  // =============================
-  let salesRevenue = 0; // Total sales from delivered orders
-  let cogs = 0; // Cost of Goods Sold (Units Sold * Purchase Price)
-  let totalRealizedProfit = 0;
+  // Calculate (selling price - buying price) for delivered orders only
+  let deliveredOrdersProfit = 0;
+  let deliveredOrdersCount = 0;
 
   orders.forEach((order) => {
-    // Skip cancelled and pending orders
-    if (order.status === "cancelled" || order.status === "pending") return;
-
-    const revenue = order.priceWithoutShipping || 0;
-    const cost = order.totalCost || 0;
-
-    // Include delivered orders in revenue and COGS
+    // Only include delivered orders
     if (order.status === "delivered") {
-      salesRevenue += revenue;
-      cogs += cost;
+      const sellingPrice = order.priceWithoutShipping || 0;
+      const buyingPrice = order.totalCost || 0;
+      const orderProfit = sellingPrice - buyingPrice;
       
-      const realProfit = order.realizedProfit != null ? order.realizedProfit : (revenue - cost);
-      totalRealizedProfit += realProfit;
-    }
-
-    // Handle returned orders - subtract profit (not full price) to avoid double-counting
-    if (order.isReturned || order.status === "returned") {
-      // Subtract the estimated profit that was previously counted
-      const returnedProfit = order.estimatedProfit || (revenue - cost);
-      totalRealizedProfit -= returnedProfit;
+      deliveredOrdersProfit += orderProfit;
+      deliveredOrdersCount++;
     }
   });
 
-  const grossProfit = salesRevenue - cogs;
-
-  // =============================
-  // B. NET PROFIT CALCULATION: Gross Profit - Operating Expenses
-  // =============================
+  // Calculate total expenses
   const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
-  const netProfit = grossProfit - totalExpenses;
-  
-  // Enhanced expense tracking by category
-  const expensesByCategory = expenses.reduce((acc, exp) => {
-    acc[exp.category] = (acc[exp.category] || 0) + exp.amount;
-    return acc;
-  }, {});
-  
-  // Calculate expense impact on profit
-  const expenseImpactRatio = grossProfit > 0 ? (totalExpenses / grossProfit * 100) : 0;
+
+  // Final calculation: (selling price - buying price) - expenses
+  const finalProfit = deliveredOrdersProfit - totalExpenses;
 
   // =============================
-  // D. DAILY TREASURY/CASHBOOK: Opening balance, inflows, outflows, closing balance
-  // =============================
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-
-  // Today's transactions for daily treasury
-  const todayOrders = orders.filter(order => order.createdAt >= today && order.createdAt < tomorrow);
-  const todayExpenses = expenses.filter(exp => exp.date >= today && exp.date < tomorrow);
-  const todayPurchases = purchases.filter(pur => pur.date >= today && pur.date < tomorrow);
-
-  // Calculate today's inflows (sales)
-  const todayInflow = todayOrders.reduce((sum, order) => {
-    if (order.status === "delivered") {
-      return sum + (order.priceWithoutShipping || 0);
-    }
-    return sum;
-  }, 0);
-
-  // Calculate today's outflows (expenses + purchases + returns)
-  const todayOutflow = todayExpenses.reduce((sum, exp) => sum + exp.amount, 0) +
-                       todayPurchases.reduce((sum, pur) => sum + pur.totalCost, 0) +
-                       todayOrders.reduce((sum, order) => {
-                         if (order.isReturned || order.status === "returned") {
-                           // Use profit (not full price) to avoid double-counting
-                           const returnedProfit = order.estimatedProfit || ((order.priceWithoutShipping || 0) - (order.totalCost || 0));
-                           return sum + returnedProfit;
-                         }
-                         return sum;
-                       }, 0);
-
-  // Daily treasury calculation
-  const dailyTreasury = todayInflow - todayOutflow;
-
-  // =============================
-  // C. TREASURY MANAGEMENT: Current balance of cash/bank accounts
-  // =============================
-  const totalPurchases = purchases.reduce((sum, pur) => sum + pur.totalCost, 0);
-  
-  // All-time treasury: Accumulate all values over time
-  // Should include all historical sales, expenses, and purchases
-  const allTimeTreasury = totalRealizedProfit - totalExpenses - totalPurchases;
-  
-  // Comprehensive debugging for all-time treasury calculation
-  console.log('=== ALL-TIME TREASURY DEBUG ===');
-  console.log('Orders count:', orders.length);
-  console.log('Expenses count:', expenses.length);
-  console.log('Purchases count:', purchases.length);
-  console.log('Products count:', products.length);
-  
-  console.log('ORDER BREAKDOWN:');
-  orders.forEach((order, index) => {
-    console.log(`Order ${index + 1}:`, {
-      id: order._id,
-      status: order.status,
-      isReturned: order.isReturned,
-      priceWithoutShipping: order.priceWithoutShipping,
-      totalCost: order.totalCost,
-      realizedProfit: order.realizedProfit,
-      totalPrice: order.totalPrice
-    });
-  });
-  
-  console.log('CALCULATION COMPONENTS:');
-  console.log('totalRealizedProfit:', totalRealizedProfit);
-  console.log('totalExpenses:', totalExpenses);
-  console.log('totalPurchases:', totalPurchases);
-  console.log('allTimeTreasury calculation:', `${totalRealizedProfit} - ${totalExpenses} - ${totalPurchases} = ${allTimeTreasury}`);
-  
-  console.log('EXPENSE BREAKDOWN:');
-  expenses.forEach((expense, index) => {
-    console.log(`Expense ${index + 1}:`, {
-      id: expense._id,
-      amount: expense.amount,
-      category: expense.category,
-      date: expense.date
-    });
-  });
-  
-  console.log('PURCHASE BREAKDOWN:');
-  purchases.forEach((purchase, index) => {
-    console.log(`Purchase ${index + 1}:`, {
-      id: purchase._id,
-      totalCost: purchase.totalCost,
-      date: purchase.date
-    });
-  });
-  console.log('=== END DEBUG ===');
-  
-  // Current treasury balance: All-time treasury minus daily treasury movements
-  const treasuryBalance = allTimeTreasury - dailyTreasury;
-
-  // =============================
-  // E. GOODS FINANCE: Inventory Value Tracking
-  // =============================
-  // Calculate total inventory value (stock_quantity * purchase_price)
-  const inventoryValue = products.reduce((sum, product) => {
-    return sum + (product.stock * (product.buyPrice || 0));
-  }, 0);
-  
-  // Enhanced inventory tracking
-  const inventoryDetails = products.reduce((acc, product) => {
-    const productValue = product.stock * (product.buyPrice || 0);
-    const sellingValue = product.stock * (product.price || 0);
-    const potentialProfit = sellingValue - productValue;
-    
-    acc.totalProducts += 1;
-    acc.totalStock += product.stock;
-    acc.totalInventoryValue += productValue;
-    acc.totalSellingValue += sellingValue;
-    acc.totalPotentialProfit += potentialProfit;
-    
-    return acc;
-  }, {
-    totalProducts: 0,
-    totalStock: 0,
-    totalInventoryValue: 0,
-    totalSellingValue: 0,
-    totalPotentialProfit: 0
-  });
-
-  // =============================
-  // RESPONSE WITH COMPREHENSIVE FINANCIAL DATA
+  // SIMPLIFIED RESPONSE
   // =============================
   res.json({
     success: true,
     message: "Financial analytics retrieved successfully",
     data: {
-      // Core Financial Metrics
-      grossProfit,           // Sales Revenue - COGS
-      netProfit,             // Gross Profit - Operating Expenses
-      totalRealizedProfit,   // Actual profit from delivered orders
-      
-      // Treasury Management
-      allTimeTreasury,       // All-time accumulated treasury balance
-      treasuryBalance,       // Current cash/bank balance (all-time minus daily)
-      dailyTreasury,         // Today's net cash movement
-      
-      // Transaction Totals
-      salesRevenue,          // Total sales revenue
-      cogs,                  // Cost of Goods Sold
-      totalExpenses,         // Operating expenses
-      totalPurchases,        // Inventory purchases
-      
-      // Daily Treasury Details
-      todayInflow,           // Today's cash inflows (sales)
-      todayOutflow,          // Today's cash outflows (expenses + purchases + returns)
-      
-      // Goods Finance
-      inventoryValue,        // Total inventory value (stock * purchase price)
-      
-      // NEW: Expense Impact Tracking
-      expensesByCategory,    // Expenses broken down by category
-      expenseImpactRatio,    // Percentage of expenses relative to gross profit
-      
-      // NEW: Enhanced Inventory Tracking
-      inventoryDetails,      // Detailed inventory metrics including potential profit
-      totalInventoryValue: inventoryDetails.totalInventoryValue,
-      totalSellingValue: inventoryDetails.totalSellingValue,
-      totalPotentialProfit: inventoryDetails.totalPotentialProfit,
-      totalProducts: inventoryDetails.totalProducts,
-      totalStock: inventoryDetails.totalStock,
-      
-      // Additional Metrics
-      totalOrders: orders.filter(o => o.status !== "cancelled" && o.status !== "pending").length,
-      deliveredOrders: orders.filter(o => o.status === "delivered").length,
-      returnedOrders: orders.filter(o => o.isReturned || o.status === "returned").length,
+      deliveredOrdersProfit,    // (selling price - buying price) of delivered orders
+      totalExpenses,             // Total expenses
+      finalProfit,               // (selling price - buying price) - expenses
+      deliveredOrdersCount,      // Number of delivered orders
     },
   });
 });
