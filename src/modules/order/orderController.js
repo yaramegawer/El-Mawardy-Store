@@ -31,7 +31,7 @@ export const createOrder = asyncHandler(async (req, res, next) => {
       return next(new Error(`Product with ID ${item.productId} not found`, { cause: 404 }));
     }
 
-    const orderQuantity = item.quantity || product.quantity || 1;
+    const orderQuantity = item.quantity || 1;
 
     if (orderQuantity <= 0) {
       return next(new Error(`Invalid quantity for product ${product.name}`, { cause: 400 }));
@@ -197,247 +197,130 @@ const restoreOrderStock = async (order) => {
     await Product.findByIdAndUpdate(item.productId, { $inc: { stock: item.quantity } });
   }
 };
-
-export const getFinanceAnalytics = asyncHandler(async (req, res, next) => {
+export const getFinanceAnalytics = asyncHandler(async (req, res) => {
   const { startDate, endDate } = req.query;
-  
-  // Helper function to create date filter
-  const createDateFilter = (dateField) => {
+
+  const createDateFilter = (field) => {
     const filter = {};
     if (startDate || endDate) {
-      filter[dateField] = {};
-      if (startDate) filter[dateField].$gte = new Date(startDate);
-      if (endDate) filter[dateField].$lte = new Date(endDate);
+      filter[field] = {};
+      if (startDate) filter[field].$gte = new Date(startDate);
+      if (endDate) filter[field].$lte = new Date(endDate);
     }
     return filter;
   };
 
-  // Fetch all data in parallel for better performance
   const [orders, expenses, purchases] = await Promise.all([
-    Order.find(createDateFilter("orderDate")).populate("products.productId", "name"),
+    Order.find(createDateFilter("orderDate")),
     Expense.find(createDateFilter("date")),
-    Purchase.find(createDateFilter("date"))
+    Purchase.find(createDateFilter("date")),
   ]);
 
-  // Calculate totals for expenses and purchases
-  const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
-  const totalPurchases = purchases.reduce((sum, pur) => sum + pur.totalCost, 0);
+  // =============================
+  // 🔹 BASIC TOTALS
+  // =============================
+  const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
+  const totalPurchases = purchases.reduce((sum, p) => sum + p.totalCost, 0);
 
-  const summary = orders.reduce(
-    (acc, order) => {
-      // 1. ADD RETURNS & DEPOSITS (We do this for ALL orders)
-      acc.totalReturns += order.returnAmount || 0;
+  let totalRevenue = 0;
+  let totalCost = 0;
+  let totalRealizedProfit = 0;
 
-      // FIX 2: Added !order.isReturned guard so fully-paid returned orders don't
-      // keep their deposit counted. Previously only paymentStatus "deposit_returned"
-      // was checked, which missed orders whose paymentStatus was "completed" at
-      // the time of return (full-payment orders).
-      if (
-        order.depositConfirmed &&
-        order.source !== "store" &&
-        order.status !== "cancelled" &&
-        !order.isReturned &&
-        order.paymentStatus !== "deposit_returned"
-      ) {
-        acc.totalDeposits += order.depositAmount || 0;
-      }
+  // =============================
+  // 🔹 PROCESS ORDERS
+  // =============================
+  orders.forEach((order) => {
+    // ❌ Ignore cancelled
+    if (order.status === "cancelled") return;
 
-      // 2. TRACK CANCELLED PROFIT ADJUSTMENTS
-      if (order.status === "cancelled") {
-        acc.totalCancelledProfit += Math.abs(order.realizedProfit || order.estimatedProfit || 0); // Track lost profit
-        return acc; // Skip revenue calculations for cancelled orders
-      }
+    // ❌ Ignore pending
+    if (order.status === "pending") return;
 
-      // 3. BLOCK PENDING, RETURNED, OR FULLY RETURNED ORDERS FROM REVENUE
-      // FIX 1: returnOrder now sets status to "returned", so this check also
-      // catches returned orders by status — not just by isReturned flag alone.
-      if (order.isReturned || order.status === "pending" || order.status === "returned") {
-        return acc;
-      }
+    // // ❌ Ignore returned (they subtract elsewhere)
+    // if (order.isReturned || order.status === "returned") return;
+if (order.isReturned || order.status === "returned") return;
 
-      // Allow confirmed, shipped, and delivered.
-      if (order.status !== "confirmed" && order.status !== "shipped" && order.status !== "delivered") {
-        return acc;
-      }
 
-      // 4. REVENUE & PROFIT LOGIC (Only runs for active, unreturned, non-cancelled orders)
-      const orderCost =
-        order.totalCost != null
-          ? order.totalCost
-          : order.products.reduce((sum, item) => sum + (item.costPrice || 0) * item.quantity, 0);
+    const revenue = order.priceWithoutShipping || 0;
 
-      const itemsPriceAfterDiscount = order.itemsPrice - order.totalDiscount;
+    const cost =
+      order.totalCost ??
+      order.products.reduce(
+        (sum, item) => sum + (item.costPrice || 0) * item.quantity,
+        0
+      );
 
-      // Estimated Profit
-      const estProfit = order.estimatedProfit != null ? order.estimatedProfit : (itemsPriceAfterDiscount - orderCost);
-      acc.totalEstimatedProfit += estProfit;
+    const estimatedProfit = revenue - cost;
 
-      // Realized Profit is only locked in when delivered
-      let realProfit = 0;
-      if (order.status === "delivered") {
-        realProfit = order.realizedProfit != null ? order.realizedProfit : estProfit;
-        acc.totalRealizedProfit += realProfit;
-      }
+    // ✅ Revenue & Cost
+    totalRevenue += revenue;
+    totalCost += cost;
 
-      const orderItems =
-        order.itemsCount != null
-          ? order.itemsCount
-          : order.products.reduce((sum, item) => sum + item.quantity, 0);
-      const totalDiscount = order.totalDiscount || 0;
+    // ✅ Realized Profit فقط delivered
+    if (order.status === "delivered") {
+      const realProfit =
+        order.realizedProfit != null ? order.realizedProfit : estimatedProfit;
 
-      acc.totalOrders += 1;
-      // Revenue = product sales excluding shipping (uses priceWithoutShipping field)
-      acc.totalRevenue += order.priceWithoutShipping || 0;
-      acc.totalShipping += order.shippingCost || 0;
-      acc.totalDiscount += totalDiscount;
-      acc.totalCost += orderCost;
-      acc.totalItemsSold += orderItems;
-
-      // 5. PRODUCT BREAKDOWN MATH
-      order.products.forEach((item) => {
-        const id = item.productId?._id?.toString() || item.productId.toString();
-        const name = item.productId?.name || "Unknown product";
-        const itemCost = item.costPrice || 0;
-        const itemDiscountAmount = item.discountAmount || 0;
-        const itemOriginalRevenue = item.price || 0;
-
-        const itemFinalRevenue =
-          item.finalPrice != null
-            ? item.finalPrice
-            : itemOriginalRevenue - itemDiscountAmount;
-
-        const itemEstProfit = itemFinalRevenue - itemCost;
-        const itemRealProfit = order.status === "delivered" ? itemEstProfit : 0;
-
-        if (!acc.products[id]) {
-          acc.products[id] = {
-            productId: id,
-            name,
-            quantitySold: 0,
-            originalRevenue: 0,
-            discount: 0,
-            revenue: 0,
-            cost: 0,
-            estimatedProfit: 0,
-            realizedProfit: 0,
-            profit: 0, // for backwards compatibility
-          };
-        }
-        acc.products[id].quantitySold += item.quantity;
-        acc.products[id].originalRevenue += item.quantity * itemOriginalRevenue;
-        acc.products[id].discount += item.quantity * itemDiscountAmount;
-        acc.products[id].revenue += item.quantity * itemFinalRevenue;
-        acc.products[id].cost += item.quantity * itemCost;
-        acc.products[id].estimatedProfit += item.quantity * itemEstProfit;
-        acc.products[id].realizedProfit += item.quantity * itemRealProfit;
-        acc.products[id].profit += item.quantity * (order.status === "delivered" ? itemRealProfit : itemEstProfit);
-      });
-      return acc;
-    },
-    {
-      totalOrders: 0,
-      totalRevenue: 0,
-      totalShipping: 0,
-      totalDiscount: 0,
-      totalCost: 0,
-      totalEstimatedProfit: 0,
-      totalRealizedProfit: 0,
-      totalItemsSold: 0,
-      totalReturns: 0,
-      totalDeposits: 0,
-      totalCancelledProfit: 0, // Track profit lost from cancelled orders
-      products: {},
+      totalRealizedProfit += realProfit;
     }
-  );
+  });
 
-  const productBreakdown = Object.values(summary.products).sort((a, b) => b.revenue - a.revenue);
+  // =============================
+  // 🔹 PROFITS
+  // =============================
+  const grossProfit = totalRevenue - totalCost;
+  const netProfit = totalRealizedProfit;
 
-  // Final Financial Rules Implementation
-  // Net Profit = Only realized profit from delivered orders (NO expenses or purchases)
-  // This represents pure business profitability from sales only
-  const netProfit = summary.totalRealizedProfit;
-  
-  // Gross Profit = Revenue - Cost of Goods Sold
-  const grossProfit = summary.totalRevenue - summary.totalCost;
-  
-  // Operating Profit = Gross Profit - Operating Expenses (for reporting only)
-  const operatingProfit = grossProfit - totalExpenses;
-  
-  // Calculate today's date for daily treasury
+  // =============================
+  // 🔹 TREASURY (TOTAL)
+  // =============================
+  // 💰 الكاش الحقيقي
+  const totalTreasury = netProfit - totalPurchases - totalExpenses;
+
+  // =============================
+  // 🔹 DAILY TREASURY
+  // =============================
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+
   const tomorrow = new Date(today);
   tomorrow.setDate(tomorrow.getDate() + 1);
 
-  // Today's orders for daily treasury
-  const todayOrders = orders.filter(order => order.orderDate >= today && order.orderDate < tomorrow);
-  const todayRevenue = todayOrders.reduce((sum, order) => {
-    if (order.status === "delivered") {
-      return sum + (order.priceWithoutShipping || 0);
+  const todayOrders = orders.filter(
+    (o) => o.orderDate >= today && o.orderDate < tomorrow
+  );
+
+  let todayProfit = 0;
+  let todayReturns = 0;
+
+  todayOrders.forEach((order) => {
+   if (order.status === "delivered" && order.realizedProfit != null) {
+  todayProfit += order.realizedProfit;
+}
+
+    if (order.isReturned || order.status === "returned") {
+      todayReturns += order.returnAmount || 0;
     }
-    return sum;
-  }, 0);
-  
-  const todayCOGS = todayOrders.reduce((sum, order) => {
-    if (order.status === "delivered") {
-      return sum + (order.totalCost || 0);
-    }
-    return sum;
-  }, 0);
+  });
 
-  // Today's operating expenses
-  const todayExpenses = expenses.filter(exp => exp.date >= today && exp.date < tomorrow);
-  const todayOperatingExpenses = todayExpenses.reduce((sum, exp) => sum + exp.amount, 0);
+  const todayExpenses = expenses
+    .filter((e) => e.date >= today && e.date < tomorrow)
+    .reduce((sum, e) => sum + e.amount, 0);
 
-  // Daily Treasury: Today's realized profit - today's expenses (can be negative)
-  // Expenses are deducted from Daily Treasury, purchases are NOT
-  const todayRealizedProfit = todayOrders.reduce((sum, order) => {
-    if (order.status === "delivered") {
-      return sum + (order.realizedProfit || 0);
-    }
-    return sum;
-  }, 0);
-  const dailyTreasury = todayRealizedProfit - todayOperatingExpenses;
+  const dailyTreasury = todayProfit - todayExpenses - todayReturns;
 
-  // Total Treasury: Accumulated cash balance over time
-  // Affected by: daily treasury adjustments (at midnight) + purchases deduction only
-  // Expenses are NOT deducted from Total Treasury (only from Daily Treasury)
-  const totalTreasury = summary.totalRealizedProfit - totalPurchases;
-
+  // =============================
+  // ✅ RESPONSE (CLEAN)
+  // =============================
   res.json({
     success: true,
-    message: "Finance analytics retrieved successfully",
     data: {
-      // Treasury metrics (calculated directly from finance data)
-      dailyTreasury: dailyTreasury, // Today's net profit (cash position)
-      totalTreasury: totalTreasury, // Cumulative net cash position
-      grossProfit: grossProfit, // Revenue - COGS
-      operatingProfit: operatingProfit, // Gross Profit - Operating Expenses
-      
-      // Performance metrics
-      averageOrderValue: summary.totalOrders ? summary.totalRevenue / summary.totalOrders : 0,
-      
-      // Revenue and costs
-      totalRevenue: summary.totalRevenue,
-      totalShipping: summary.totalShipping,
-      totalDiscount: summary.totalDiscount,
-      totalCost: summary.totalCost,
-      totalExpenses: totalExpenses,
-      totalPurchases: totalPurchases,
-      
-      // Profit calculations (consistent naming)
-      grossProfit: grossProfit, // Revenue - Cost of Goods
-      operatingProfit: operatingProfit, // Gross Profit - Operating Expenses
-      totalEstimatedProfit: summary.totalEstimatedProfit, // Expected profit from all orders
-      totalRealizedProfit: summary.totalRealizedProfit, // Actual profit from delivered orders
-      netProfit: netProfit, // Final profit after all costs
-      totalProfit: summary.totalRealizedProfit, // Backwards compatibility
-      
-      // Financial movements
-      totalReturns: summary.totalReturns,
-      totalDeposits: summary.totalDeposits,
-      totalCancelledProfit: summary.totalCancelledProfit,
-      purchases: purchases,
+      grossProfit,
+      netProfit,
+      totalTreasury,
+      dailyTreasury,
+      totalExpenses,
+      totalPurchases,
     },
   });
 });
@@ -474,7 +357,7 @@ export const updateOrderStatus = asyncHandler(async (req, res, next) => {
     // Set priceWithoutShipping to 0 since cancelled orders don't generate revenue
     if (order.status !== "cancelled") {
       const profitToReverse = order.estimatedProfit || 0;
-      order.realizedProfit = -Math.abs(profitToReverse); // Track profit reversal as negative
+      order.realizedProfit = 0; // Track profit reversal as negative
       order.priceWithoutShipping = 0; // No revenue from cancelled orders
     }
   }
@@ -607,17 +490,14 @@ export const returnOrder = asyncHandler(async (req, res, next) => {
   const returnAmount = order.totalPrice;
 
   // Update order with return information
-  order.isReturned = true;
-  order.returnAmount = returnAmount;
-  order.returnReason = returnReason.trim();
-  order.returnDate = new Date();
-  order.refundStatus = "pending";
-  order.status = "returned"; // Explicit status for analytics
-  order.paymentStatus = "deposit_returned"; // Consistent payment status for returned orders
+order.isReturned = true;
+order.status = "returned";
+order.paymentStatus = "deposit_returned";
 
-  // Set realizedProfit to negative of total price to subtract from net profit
-  // This ensures the total price is removed from net profit calculations when returned
-  order.realizedProfit = -Math.abs(returnAmount);
+order.returnAmount = order.totalPrice;
+order.returnReason = returnReason.trim();
+order.returnDate = new Date();
+order.refundStatus = "pending";
 
   await order.save();
 
@@ -859,9 +739,9 @@ export const exchangeOrderProducts = asyncHandler(async (req, res, next) => {
   // instead of setting it to null and relying on the analytics reducer's fallback.
   // This makes the intent explicit and avoids any ambiguity in the reducer path.
   order.estimatedProfit = newItemsRevenue - recalcTotalCost;
-  if (order.status === "delivered") {
-    order.realizedProfit = order.estimatedProfit;
-  } else {
+if (order.status === "delivered") {
+  order.realizedProfit = newItemsRevenue - recalcTotalCost;
+}else {
     order.realizedProfit = null; // Will be set again when delivered
   }
 
@@ -879,7 +759,9 @@ export const exchangeOrderProducts = asyncHandler(async (req, res, next) => {
 
   // Per-item summary for the response — show both selling prices and final prices
   // so the caller can display the full breakdown to the customer.
+
   const exchangeSummary = exchanges.map((e) => ({
+    
     originalProductId: e.originalProductId,
     newProductId: e.newProductId,
     quantity: e.quantity,
