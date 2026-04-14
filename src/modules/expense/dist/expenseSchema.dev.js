@@ -7,8 +7,6 @@ exports.createExpenseSchema = void 0;
 
 var _joi = _interopRequireDefault(require("joi"));
 
-var _validationMiddleware = require("../../middlewares/validationMiddleware");
-
 var _Joi$string, _Joi$string2;
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { "default": obj }; }
