@@ -62,7 +62,7 @@ export const getAllExpenses = asyncHandler(async (req, res, next) => {
   const skip = (page - 1) * limit;
 
   const [expenses, total] = await Promise.all([
-    Expense.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit),
+    Expense.find(filter).sort({ date: -1 }).skip(skip).limit(limit),
     Expense.countDocuments(filter),
   ]);
 
@@ -84,15 +84,50 @@ export const getExpenseById = asyncHandler(async (req, res, next) => {
 export const updateExpense = asyncHandler(async (req, res, next) => {
   const { description, amount, category, paymentMethod, notes } = req.body;
 
-  const expense = await Expense.findByIdAndUpdate(
-    req.params.id,
-    { description, amount, category, paymentMethod, notes },
-    { new: true }
-  );
+  // Validation
+  if (description && description.trim().length === 0) {
+    return next(new Error("Description cannot be empty", { cause: 400 }));
+  }
 
-  if (!expense) return next(new Error("Expense not found!", { cause: 404 }));
+  if (amount && (isNaN(amount) || amount <= 0)) {
+    return next(new Error("Valid amount is required", { cause: 400 }));
+  }
 
-  res.json({ success: true, message: "Expense updated successfully", data: expense });
+  const validCategories = ["rent", "utilities", "marketing", "salaries", "supplies", "maintenance", "shipping", "ads", "vodafone_cash", "other_operating"];
+  if (category && !validCategories.includes(category)) {
+    return next(new Error(`Invalid category. Valid categories: ${validCategories.join(", ")}`, { cause: 400 }));
+  }
+
+  const validPaymentMethods = ["vodafone_cash", "cash", "bank"];
+  if (paymentMethod && !validPaymentMethods.includes(paymentMethod)) {
+    return next(new Error(`Invalid payment method. Valid methods: ${validPaymentMethods.join(", ")}`, { cause: 400 }));
+  }
+
+  // Prepare update object with only provided fields
+  const updateData = {};
+  if (description !== undefined) updateData.description = description.trim();
+  if (amount !== undefined) updateData.amount = parseFloat(amount);
+  if (category !== undefined) updateData.category = category;
+  if (paymentMethod !== undefined) updateData.paymentMethod = paymentMethod;
+  if (notes !== undefined) updateData.notes = notes.trim() || undefined;
+
+  try {
+    const expense = await Expense.findByIdAndUpdate(
+      req.params.id,
+      updateData,
+      { new: true, runValidators: true }
+    );
+
+    if (!expense) return next(new Error("Expense not found!", { cause: 404 }));
+
+    res.json({ success: true, message: "Expense updated successfully", data: expense });
+  } catch (error) {
+    if (error.name === 'ValidationError') {
+      const validationErrors = Object.values(error.errors).map(err => err.message);
+      return next(new Error(`Validation failed: ${validationErrors.join(", ")}`, { cause: 400 }));
+    }
+    return next(new Error("Failed to update expense. Please try again.", { cause: 500 }));
+  }
 });
 
 export const deleteExpense = asyncHandler(async (req, res, next) => {

@@ -52,7 +52,7 @@ export const deleteOrder = joi.object({
 
 export const returnOrder = joi.object({
   id:           joi.string().custom(isValidObjectId).required(),
-  returnReason: joi.string().optional(),
+  returnReason: joi.string().trim().min(1).required(),
 });
 
 export const exchangeOrderProducts = joi.object({
@@ -69,5 +69,5 @@ export const exchangeOrderProducts = joi.object({
       newSize:            joi.string().optional(),
     })
   ).min(1).required(),
-  exchangeReason: joi.string().optional(),
+  exchangeReason: joi.string().trim().min(1).required(),
 });

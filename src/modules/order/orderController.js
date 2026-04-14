@@ -119,7 +119,7 @@ export const createOrder = asyncHandler(async (req, res, next) => {
     paymentStatus: "pending",
     depositConfirmed: false,
     status: "pending",
-    orderDate: Date.now(),
+    orderDate: new Date(), // Use proper Date constructor
     source: source || "online",
     notes,
   });
