@@ -197,6 +197,7 @@ const restoreOrderStock = async (order) => {
     await Product.findByIdAndUpdate(item.productId, { $inc: { stock: item.quantity } });
   }
 };
+
 export const getFinanceAnalytics = asyncHandler(async (req, res) => {
   const { startDate, endDate } = req.query;
 
@@ -226,12 +227,30 @@ export const getFinanceAnalytics = asyncHandler(async (req, res) => {
     expenses = await Expense.find({});
   }
 
-  // Calculate (selling price - buying price) for delivered orders only
+  // Calculate sales and profit with returns/exchanges impact
+  let totalSales = 0;
   let deliveredOrdersProfit = 0;
   let deliveredOrdersCount = 0;
+  let returnedSalesAmount = 0;
+  let exchangedSalesAmount = 0;
 
   orders.forEach((order) => {
-    // Only include delivered orders
+    // Add to total sales for all orders (excluding cancelled)
+    if (order.status !== "cancelled") {
+      totalSales += order.itemsPrice || 0;
+    }
+
+    // Handle returned orders - subtract their itemsPrice from sales
+    if (order.isReturned || order.status === "returned") {
+      returnedSalesAmount += order.itemsPrice || 0;
+    }
+
+    // Handle exchanged orders - subtract their original itemsPrice from sales
+    if (order.isExchanged || order.status === "exchanged") {
+      exchangedSalesAmount += order.itemsPrice || 0;
+    }
+
+    // Calculate profit for delivered orders only
     if (order.status === "delivered") {
       const sellingPrice = order.priceWithoutShipping || 0;
       const buyingPrice = order.totalCost || 0;
@@ -241,6 +260,9 @@ export const getFinanceAnalytics = asyncHandler(async (req, res) => {
       deliveredOrdersCount++;
     }
   });
+
+  // Calculate net sales (total sales minus returns and exchanges)
+  const netSales = totalSales - returnedSalesAmount - exchangedSalesAmount;
 
   // Calculate total expenses
   const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
@@ -255,6 +277,13 @@ export const getFinanceAnalytics = asyncHandler(async (req, res) => {
     success: true,
     message: "Financial analytics retrieved successfully",
     data: {
+      // Sales Data
+      totalSales,                // Total itemsPrice from all orders (excluding cancelled)
+      returnedSalesAmount,        // Total itemsPrice from returned orders
+      exchangedSalesAmount,       // Total itemsPrice from exchanged orders
+      netSales,                 // Net sales (total - returns - exchanges)
+      
+      // Profit Data
       deliveredOrdersProfit,    // (selling price - buying price) of delivered orders
       totalExpenses,             // Total expenses
       finalProfit,               // (selling price - buying price) - expenses
@@ -265,6 +294,7 @@ export const getFinanceAnalytics = asyncHandler(async (req, res) => {
 
 // Add the missing function declaration
 export const updateOrderStatus = asyncHandler(async (req, res, next) => {
+  // ...
   const { status, paymentStatus, notes } = req.body;
   const order = await Order.findById(req.params.id);
   if (!order) return next(new Error("Order not found!", { cause: 404 }));
