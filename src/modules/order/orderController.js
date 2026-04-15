@@ -233,15 +233,15 @@ export const getFinanceAnalytics = asyncHandler(async (req, res) => {
   let deliveredOrdersCount = 0;
 
   orders.forEach((order) => {
-    // Calculate net sales: only count orders that were originally sold
-    // Returns and exchanges should not be in net sales since they represent
-    // items that are being returned/swapped, not new sales
+    // Calculate net sales: 
+    // - Include all orders that were originally sold (pending, confirmed, shipped, delivered)
+    // - Include exchanged orders since original sale was made
+    // - Exclude returned orders (money was refunded)
+    // - Exclude cancelled orders (no sale was made)
     if (order.status !== "cancelled" && 
         order.status !== "returned" && 
-        order.status !== "exchanged" &&
-        !order.isReturned && 
-        !order.isExchanged) {
-      // Only add sales for orders that are still active (pending, confirmed, shipped, delivered)
+        !order.isReturned) {
+      // Add sales for orders where money was collected
       netSales += order.itemsPrice || 0;
     }
 
