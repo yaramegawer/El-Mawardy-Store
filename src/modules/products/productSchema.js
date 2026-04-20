@@ -9,7 +9,7 @@ export const createProduct=joi.object({
     quantity:joi.number().default(1),
     colorStock:joi.array().items(joi.object({
         color:joi.string().required(),
-        stock:joi.number().default(0),
+        stock:joi.number().min(0).default(0),
     })).min(1).required(),
     size:joi.array().items(joi.string().required()).required(),
     description:joi.string().default(" "),
@@ -29,7 +29,7 @@ export const updateProduct=joi.object({
     quantity:joi.number(),
     colorStock:joi.array().items(joi.object({
         color:joi.string().required(),
-        stock:joi.number().default(0),
+        stock:joi.number().min(0).default(0),
     })),
     size:joi.array().items(joi.string()),
     description:joi.string(),
