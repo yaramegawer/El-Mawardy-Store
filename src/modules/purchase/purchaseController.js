@@ -10,9 +10,9 @@ export const createPurchase = asyncHandler(async (req, res, next) => {
     return next(new Error("Supplier is required", { cause: 400 }));
   }
 
-  // Auto-calculate purchases from all products with stock > 0
+  // Auto-calculate purchases from all products with colorStock entries having stock > 0
   const productsWithStock = await Product.find({ 
-    stock: { $gt: 0 },
+    "colorStock.stock": { $gt: 0 },
     buyPrice: { $gt: 0 } // Only include products with valid buyPrice
   });
 

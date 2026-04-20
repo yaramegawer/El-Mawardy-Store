@@ -37,8 +37,26 @@ export const createOrder = asyncHandler(async (req, res, next) => {
       return next(new Error(`Invalid quantity for product ${product.name}`, { cause: 400 }));
     }
 
-    if (orderQuantity > product.stock) {
-      return next(new Error(`Insufficient stock for product ${product.name}. Required: ${orderQuantity}, Available: ${product.stock}`, { cause: 400 }));
+    // Resolve color: use the one specified in the order item, or fall back to
+    // the first color available in the product's colorStock array.
+    const snapshotColor = item.color
+      || (product.colorStock && product.colorStock.length > 0 ? product.colorStock[0].color : undefined);
+    const snapshotSize = item.size || product.size;
+
+    // Validate stock for the specific color variant
+    if (snapshotColor) {
+      const colorEntry = (product.colorStock || []).find(cs => cs.color === snapshotColor);
+      if (!colorEntry) {
+        return next(new Error(`Color "${snapshotColor}" not found for product ${product.name}`, { cause: 400 }));
+      }
+      if (orderQuantity > colorEntry.stock) {
+        return next(new Error(`Insufficient stock for product ${product.name} (color: ${snapshotColor}). Required: ${orderQuantity}, Available: ${colorEntry.stock}`, { cause: 400 }));
+      }
+    } else {
+      // No color specified and no colorStock — fall back to total stock check
+      if (orderQuantity > product.stock) {
+        return next(new Error(`Insufficient stock for product ${product.name}. Required: ${orderQuantity}, Available: ${product.stock}`, { cause: 400 }));
+      }
     }
 
     // product.price is already the final selling price (discount already applied in product model)
@@ -51,9 +69,6 @@ export const createOrder = asyncHandler(async (req, res, next) => {
         { cause: 400 }
       ));
     }
-
-    const snapshotColor = item.color || product.color;
-    const snapshotSize = item.size || product.size;
 
     // Calculate discount properly - handle division by zero
     const discountPercentage = product.discount || 0;
@@ -194,7 +209,19 @@ export const getOrderById = asyncHandler(async (req, res, next) => {
 const restoreOrderStock = async (order) => {
   if (!order.depositConfirmed) return;
   for (const item of order.products) {
-    await Product.findByIdAndUpdate(item.productId, { $inc: { stock: item.quantity } });
+    if (item.color) {
+      // Restore stock for the specific color variant
+      await Product.findOneAndUpdate(
+        { _id: item.productId, "colorStock.color": item.color },
+        { $inc: { "colorStock.$.stock": item.quantity } }
+      );
+    } else {
+      // Fallback: distribute to first colorStock entry
+      await Product.findOneAndUpdate(
+        { _id: item.productId, "colorStock.0": { $exists: true } },
+        { $inc: { "colorStock.0.stock": item.quantity } }
+      );
+    }
   }
 };
 
@@ -354,17 +381,27 @@ export const confirmDeposit = asyncHandler(async (req, res, next) => {
     return next(new Error("Deposit has already been confirmed for this order", { cause: 400 }));
   }
 
-  // Atomically decrement stock for each product, but only if sufficient stock exists.
-  // Using findOneAndUpdate with a { stock: { $gte: quantity } } condition collapses
-  // the old validate-then-decrement two-loop pattern into a single DB call per product,
-  // and eliminates the race condition where two concurrent confirmations for the same
-  // product both pass the stock check before either one decrements.
+  // Atomically decrement stock for each product's specific color variant,
+  // but only if sufficient stock exists. Uses arrayFilters to target the exact
+  // colorStock entry by color, and a $gte condition to prevent overselling.
   for (const item of order.products) {
-    const updated = await Product.findOneAndUpdate(
-      { _id: item.productId, stock: { $gte: item.quantity } },
-      { $inc: { stock: -item.quantity } },
-      { new: true }
-    );
+    let updated;
+
+    if (item.color) {
+      // Atomic decrement on the specific color variant
+      updated = await Product.findOneAndUpdate(
+        { _id: item.productId, "colorStock": { $elemMatch: { color: item.color, stock: { $gte: item.quantity } } } },
+        { $inc: { "colorStock.$.stock": -item.quantity } },
+        { new: true }
+      );
+    } else {
+      // Fallback: decrement the first colorStock entry
+      updated = await Product.findOneAndUpdate(
+        { _id: item.productId, "colorStock.0.stock": { $gte: item.quantity } },
+        { $inc: { "colorStock.0.stock": -item.quantity } },
+        { new: true }
+      );
+    }
 
     if (!updated) {
       // Either the product doesn't exist, or stock dropped below the required quantity
@@ -373,9 +410,13 @@ export const confirmDeposit = asyncHandler(async (req, res, next) => {
       if (!product) {
         return next(new Error(`Product with ID ${item.productId} not found`, { cause: 404 }));
       }
+      const colorEntry = item.color
+        ? (product.colorStock || []).find(cs => cs.color === item.color)
+        : (product.colorStock || [])[0];
+      const availableStock = colorEntry ? colorEntry.stock : 0;
       return next(
         new Error(
-          `Insufficient stock for product ${product.name}. Required: ${item.quantity}, available: ${product.stock}`,
+          `Insufficient stock for product ${product.name}${item.color ? ` (color: ${item.color})` : ''}. Required: ${item.quantity}, available: ${availableStock}`,
           { cause: 400 }
         )
       );
@@ -400,7 +441,17 @@ export const deleteOrder = asyncHandler(async (req, res, next) => {
   // and has not already been returned (which would have restored stock separately).
   if (order.depositConfirmed && !order.isReturned) {
     for (const item of order.products) {
-      await Product.findByIdAndUpdate(item.productId, { $inc: { stock: item.quantity } });
+      if (item.color) {
+        await Product.findOneAndUpdate(
+          { _id: item.productId, "colorStock.color": item.color },
+          { $inc: { "colorStock.$.stock": item.quantity } }
+        );
+      } else {
+        await Product.findOneAndUpdate(
+          { _id: item.productId, "colorStock.0": { $exists: true } },
+          { $inc: { "colorStock.0.stock": item.quantity } }
+        );
+      }
     }
   }
 
@@ -435,7 +486,17 @@ export const returnOrder = asyncHandler(async (req, res, next) => {
   if (order.depositConfirmed) {
     try {
       for (const item of order.products) {
-        await Product.findByIdAndUpdate(item.productId, { $inc: { stock: item.quantity } });
+        if (item.color) {
+          await Product.findOneAndUpdate(
+            { _id: item.productId, "colorStock.color": item.color },
+            { $inc: { "colorStock.$.stock": item.quantity } }
+          );
+        } else {
+          await Product.findOneAndUpdate(
+            { _id: item.productId, "colorStock.0": { $exists: true } },
+            { $inc: { "colorStock.0.stock": item.quantity } }
+          );
+        }
       }
       stockRestored = order.itemsCount || 0;
     } catch (error) {
@@ -579,7 +640,23 @@ export const exchangeOrderProducts = asyncHandler(async (req, res, next) => {
       return next(new Error(`Product with ID ${newProductId} not found`, { cause: 404 }));
     }
 
-    if (quantity > newProduct.stock) {
+    // Validate stock for the specific color of the new product
+    const resolvedNewColor = newColor
+      || (newProduct.colorStock && newProduct.colorStock.length > 0 ? newProduct.colorStock[0].color : undefined);
+    if (resolvedNewColor) {
+      const newColorEntry = (newProduct.colorStock || []).find(cs => cs.color === resolvedNewColor);
+      if (!newColorEntry) {
+        return next(new Error(`Color "${resolvedNewColor}" not found for product ${newProduct.name}`, { cause: 400 }));
+      }
+      if (quantity > newColorEntry.stock) {
+        return next(
+          new Error(
+            `Insufficient stock for ${newProduct.name} (color: ${resolvedNewColor}). Available: ${newColorEntry.stock}`,
+            { cause: 400 }
+          )
+        );
+      }
+    } else if (quantity > newProduct.stock) {
       return next(
         new Error(
           `Insufficient stock for ${newProduct.name}. Available: ${newProduct.stock}`,
@@ -597,9 +674,30 @@ export const exchangeOrderProducts = asyncHandler(async (req, res, next) => {
     // not the pre-discount price — this is what flows into totalPrice / dueAmount.
     const priceAdjustment = (newFinalPrice - originalFinalPrice) * quantity;
 
-    // Stock: return the original units, reserve the new ones
-    await Product.findByIdAndUpdate(originalProduct.productId, { $inc: { stock: quantity } });
-    await Product.findByIdAndUpdate(newProductId, { $inc: { stock: -quantity } });
+    // Stock: return the original units to their color variant, reserve the new ones
+    const origColor = originalProduct.color;
+    if (origColor) {
+      await Product.findOneAndUpdate(
+        { _id: originalProduct.productId, "colorStock.color": origColor },
+        { $inc: { "colorStock.$.stock": quantity } }
+      );
+    } else {
+      await Product.findOneAndUpdate(
+        { _id: originalProduct.productId, "colorStock.0": { $exists: true } },
+        { $inc: { "colorStock.0.stock": quantity } }
+      );
+    }
+    if (resolvedNewColor) {
+      await Product.findOneAndUpdate(
+        { _id: newProductId, "colorStock.color": resolvedNewColor },
+        { $inc: { "colorStock.$.stock": -quantity } }
+      );
+    } else {
+      await Product.findOneAndUpdate(
+        { _id: newProductId, "colorStock.0": { $exists: true } },
+        { $inc: { "colorStock.0.stock": -quantity } }
+      );
+    }
 
     // Audit log — store both the pre-discount selling price AND the final
     // (post-discount) price so the dashboard can display either.
@@ -627,7 +725,7 @@ export const exchangeOrderProducts = asyncHandler(async (req, res, next) => {
       originalProduct.finalPrice = newFinalPrice;
       originalProduct.costPrice = newProduct.buyPrice || 0;
       originalProduct.color =
-        newColor || (Array.isArray(newProduct.color) ? newProduct.color[0] : newProduct.color);
+        newColor || (newProduct.colorStock && newProduct.colorStock.length > 0 ? newProduct.colorStock[0].color : undefined);
       originalProduct.size =
         newSize || (Array.isArray(newProduct.size) ? newProduct.size[0] : newProduct.size);
     } else {
@@ -647,7 +745,7 @@ export const exchangeOrderProducts = asyncHandler(async (req, res, next) => {
         discountAmount: newDiscountAmt,
         finalPrice: newFinalPrice,
         costPrice: newProduct.buyPrice || 0,
-        color: newColor || (Array.isArray(newProduct.color) ? newProduct.color[0] : newProduct.color),
+        color: newColor || (newProduct.colorStock && newProduct.colorStock.length > 0 ? newProduct.colorStock[0].color : undefined),
         size: newSize || (Array.isArray(newProduct.size) ? newProduct.size[0] : newProduct.size),
       });
     }

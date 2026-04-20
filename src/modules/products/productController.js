@@ -110,20 +110,20 @@ export const deleteProduct=asyncHandler(async(req,res,next)=>{
 
 export const updateProduct = asyncHandler(async (req, res, next) => {
 
-    let {name,price,discount,buyPrice,description,stock,category,season,color,size}=req.body;
+    let {name,price,discount,buyPrice,description,colorStock,category,season,size}=req.body;
     // Check if the product exists
     const product = await Product.findById(req.params.id);
     if (!product) {
         next(new Error("Product not found", { cause: 404 }));
         return;
     }
-    //qpply discount if provided
+    //apply discount if provided
     if(discount){
         const discountAmount=(price*req.body.discount)/100;
         price=price-discountAmount;
     }
 
-    const updatedProduct=await Product.findByIdAndUpdate(req.params.id,{name,price,buyPrice,description,stock,category,season,color,size,discount},{new:true})
+    const updatedProduct=await Product.findByIdAndUpdate(req.params.id,{name,price,buyPrice,description,colorStock,category,season,size,discount},{new:true})
 
     return res.json({
         success: true,

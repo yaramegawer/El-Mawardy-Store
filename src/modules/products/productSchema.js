@@ -7,10 +7,12 @@ export const createProduct=joi.object({
     price:joi.number().required(),
     buyPrice:joi.number().required(),
     quantity:joi.number().default(1),
-    color:joi.array().items(joi.string().required()).required(),
+    colorStock:joi.array().items(joi.object({
+        color:joi.string().required(),
+        stock:joi.number().default(0),
+    })).min(1).required(),
     size:joi.array().items(joi.string().required()).required(),
     description:joi.string().default(" "),
-    stock:joi.number().default(0),
     category:joi.string().required(),
     season:joi.string().required(),
 }).required();
@@ -25,10 +27,12 @@ export const updateProduct=joi.object({
     price:joi.number(),
     buyPrice:joi.number(),
     quantity:joi.number(),
-    color:joi.array().items(joi.string()),
+    colorStock:joi.array().items(joi.object({
+        color:joi.string().required(),
+        stock:joi.number().default(0),
+    })),
     size:joi.array().items(joi.string()),
     description:joi.string(),
-    stock:joi.number(),
     category:joi.string(),
     season:joi.string(),
     discount:joi.number().min(0).max(100).optional(), // percentage discount (e.g., 20 for 20% off)
