@@ -6,11 +6,20 @@ import { fileUpload } from "../../utils/fileUpload.js";
 import { validation } from "../../middlewares/validationMiddleware.js";
 import { isAdmin } from "../../middlewares/isAdmin.js";
 const router=Router();
+import qs from 'qs';
+
+// Middleware to parse nested multipart form data arrays and objects using qs
+const parseFormData = (req, res, next) => {
+    if (req.body) {
+        req.body = qs.parse(qs.stringify(req.body));
+    }
+    next();
+};
 
 router.post('/',fileUpload().fields([
     {name:"defaultImage",maxCount:1},
     {name:"subImage"},
-]),validation(productSchema.createProduct),productController.createProduct);
+]),parseFormData,validation(productSchema.createProduct),productController.createProduct);
 
 router.get('/',productController.allProducts);
 
