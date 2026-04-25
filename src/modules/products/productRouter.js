@@ -30,4 +30,10 @@ router.delete('/:id',productController.deleteProduct)
 
 
 router.put('/:id',validation(productSchema.updateProduct),productController.updateProduct);
+
+router.put('/:id/images',fileUpload().fields([
+    {name:"defaultImage",maxCount:1},
+    {name:"subImage"},
+]),validation(productSchema.updateProductImages),productController.updateProductImages);
+
 export default router;

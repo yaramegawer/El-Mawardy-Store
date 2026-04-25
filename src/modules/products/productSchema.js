@@ -37,3 +37,7 @@ export const updateProduct=joi.object({
     season:joi.string(),
     discount:joi.number().min(0).max(100).optional(), // percentage discount (e.g., 20 for 20% off)
 }).required();
+
+export const updateProductImages=joi.object({
+    id:joi.string().custom(isValidObjectId).required(),
+}).required();

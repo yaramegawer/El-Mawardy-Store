@@ -132,6 +132,73 @@ export const updateProduct = asyncHandler(async (req, res, next) => {
     });
 });
 
+export const updateProductImages = asyncHandler(async (req, res, next) => {
+    // Check if the product exists
+    const product = await Product.findById(req.params.id);
+    if (!product) {
+        return next(new Error("Product not found", { cause: 404 }));
+    }
+
+    if (!req.files) {
+        return next(new Error("No images provided", { cause: 400 }));
+    }
+
+    const cloudFolderStr = `${process.env.CLOUD_FOLDER_NAME}/products/${product.cloudFolder}`;
+    const updatedImages = [];
+    const oldImageIds = [];
+
+    // Handle default image update
+    if (req.files.defaultImage && req.files.defaultImage.length > 0) {
+        // Delete old default image from Cloudinary
+        oldImageIds.push(product.defaultImage.id);
+        
+        // Upload new default image
+        const defaultResult = await cloudinary.uploader.upload(req.files.defaultImage[0].path, { 
+            folder: cloudFolderStr 
+        });
+        
+        product.defaultImage = {
+            url: defaultResult.secure_url,
+            id: defaultResult.public_id
+        };
+    }
+
+    // Handle additional images update
+    if (req.files.subImage && req.files.subImage.length > 0) {
+        // Delete old additional images from Cloudinary
+        product.images.forEach(image => {
+            oldImageIds.push(image.id);
+        });
+        
+        // Upload new additional images
+        const subImageUploads = req.files.subImage.map(file => 
+            cloudinary.uploader.upload(file.path, { folder: cloudFolderStr })
+        );
+        
+        const subImageResults = await Promise.all(subImageUploads);
+        const subImagesArray = subImageResults.map(res => ({ 
+            id: res.public_id, 
+            url: res.secure_url 
+        }));
+        
+        product.images = subImagesArray;
+    }
+
+    // Delete old images from Cloudinary if they were replaced
+    if (oldImageIds.length > 0) {
+        await cloudinary.api.delete_resources(oldImageIds);
+    }
+
+    // Save the updated product
+    await product.save();
+
+    return res.json({
+        success: true,
+        message: "Product images updated successfully!",
+        product
+    });
+});
+
 //search by code
 export const searchByCode=asyncHandler(async(req,res,next)=>{
     const {code}=req.query;
