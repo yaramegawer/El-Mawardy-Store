@@ -276,6 +276,7 @@ export const getFinanceAnalytics = asyncHandler(async (req, res) => {
   let netSales = 0;
   let deliveredOrdersProfit = 0;
   let deliveredOrdersCount = 0;
+  let totalSoldItems = 0;
 
   orders.forEach((order) => {
     // Calculate net sales: 
@@ -288,6 +289,8 @@ export const getFinanceAnalytics = asyncHandler(async (req, res) => {
         !order.isReturned) {
       // Add sales for orders where money was collected
       netSales += order.itemsPrice || 0;
+      // Add items count for sold items
+      totalSoldItems += order.itemsCount || 0;
     }
 
     // Calculate profit for delivered orders only
@@ -316,6 +319,7 @@ export const getFinanceAnalytics = asyncHandler(async (req, res) => {
     data: {
       // Sales Data
       netSales,                 // Net sales (total orders minus returns minus exchanges)
+      totalSoldItems,           // Total number of items sold (excluding cancelled and returned)
       
       // Profit Data
       deliveredOrdersProfit,    // (selling price - buying price) of delivered orders
