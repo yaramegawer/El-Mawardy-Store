@@ -8,6 +8,8 @@ export const createOrder = joi.object({
       quantity:  joi.number().integer().min(1).optional(), // optional — falls back to product default
       color:     joi.string().optional(),
       size:      joi.string().optional(),
+      customPrice: joi.number().min(0).optional(), // Custom selling price for this specific order item
+      customDiscount: joi.number().min(0).max(100).optional(), // Custom discount percentage (0-100)
     })
   ).min(1).required(),
   customerName:         joi.string().required(),

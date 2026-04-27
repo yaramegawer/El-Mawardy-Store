@@ -59,26 +59,44 @@ export const createOrder = asyncHandler(async (req, res, next) => {
       }
     }
 
-    // product.price is already the final selling price (discount already applied in product model)
-    const snapshotPrice = product.price;
-    const snapshotCostPrice = product.buyPrice;
+    // Allow per-item price override or use product default pricing
+    let snapshotPrice, snapshotCostPrice, discountPercentage, originalPrice, discountAmount;
+    
+    if (item.customPrice !== undefined && item.customPrice !== null) {
+      // Use custom price for this specific order item
+      snapshotPrice = item.customPrice;
+      snapshotCostPrice = product.buyPrice; // Still use product's cost price
+      
+      // For custom pricing, we assume no discount unless explicitly provided
+      discountPercentage = item.customDiscount || 0;
+      originalPrice = snapshotPrice;
+      discountAmount = 0;
+      
+      if (discountPercentage > 0) {
+        // If custom discount is provided, calculate original price and discount amount
+        originalPrice = snapshotPrice / (1 - discountPercentage / 100);
+        discountAmount = originalPrice - snapshotPrice;
+      }
+    } else {
+      // Use product default pricing
+      snapshotPrice = product.price;
+      snapshotCostPrice = product.buyPrice;
+      discountPercentage = product.discount || 0;
+      originalPrice = snapshotPrice;
+      discountAmount = 0;
+      
+      if (discountPercentage > 0) {
+        // If product has discount, calculate original price and discount amount
+        originalPrice = snapshotPrice / (1 - discountPercentage / 100);
+        discountAmount = originalPrice - snapshotPrice;
+      }
+    }
 
     if (snapshotCostPrice == null) {
       return next(new Error(
         `Product ${product.name} must have a buyPrice to calculate finance metrics`,
         { cause: 400 }
       ));
-    }
-
-    // Calculate discount properly - handle division by zero
-    const discountPercentage = product.discount || 0;
-    let originalPrice = snapshotPrice;
-    let discountAmount = 0;
-    
-    if (discountPercentage > 0) {
-      // If product has discount, calculate original price and discount amount
-      originalPrice = snapshotPrice / (1 - discountPercentage / 100);
-      discountAmount = originalPrice - snapshotPrice;
     }
 
     itemsPrice += orderQuantity * snapshotPrice;
