@@ -455,9 +455,13 @@ export const deleteOrder = asyncHandler(async (req, res, next) => {
   const order = await Order.findById(req.params.id);
   if (!order) return next(new Error("Order not found!", { cause: 404 }));
 
+  // Check if stock restoration should be skipped (e.g., for cancelled orders that already restored stock)
+  const noRestore = req.query.noRestore === 'true';
+
   // FIX: restore stock if the order had already reserved inventory (deposit confirmed)
   // and has not already been returned (which would have restored stock separately).
-  if (order.depositConfirmed && !order.isReturned) {
+  // Skip restoration if noRestore=true is passed (e.g., when deleting cancelled orders).
+  if (!noRestore && order.depositConfirmed && !order.isReturned) {
     for (const item of order.products) {
       if (item.color) {
         await Product.findOneAndUpdate(
