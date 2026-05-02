@@ -45,14 +45,17 @@ export const createProduct = asyncHandler(async (req, res, next) => {
 export const allProducts=asyncHandler(async(req,res,next)=>{
     let page = parseInt(req.query.page) || 1; // Ensure page is a valid number
     //fiter by category and season
-    let filter = {
-        $or: [{ visible: true }, { visible: { $exists: false } }]
-    };
+    let filter = {};
     if (req.query.category) {
         filter.category = req.query.category;
     }
     if (req.query.season) {
         filter.season = req.query.season;
+    }
+
+    // Only filter by visibility if NOT admin request
+    if (req.query.admin !== 'true') {
+        filter.visible = { $ne: false };
     }
 
     page = page < 1 ? 1 : page; // Prevent negative or zero pages
@@ -81,10 +84,12 @@ export const allProducts=asyncHandler(async(req,res,next)=>{
 });
 
 export const getProductById=asyncHandler(async(req,res,next)=>{
-    const product=await Product.findOne({
-        _id: req.params.id,
-        $or: [{ visible: true }, { visible: { $exists: false } }]
-    });
+    let query = { _id: req.params.id };
+    // Only filter by visibility if NOT admin request
+    if (req.query.admin !== 'true') {
+        query.visible = { $ne: false };
+    }
+    const product=await Product.findOne(query);
     if(!product) return next(new Error("Product not found",{cause:404}));       
     return res.json({
         success:true,
@@ -208,10 +213,12 @@ export const updateProductImages = asyncHandler(async (req, res, next) => {
 export const searchByCode=asyncHandler(async(req,res,next)=>{
     const {code}=req.query;
     if(!code) return next(new Error("code is required",{cause:400}));
-    const product=await Product.findOne({
-        code,
-        $or: [{ visible: true }, { visible: { $exists: false } }]
-    });
+    let query = { code };
+    // Only filter by visibility if NOT admin request
+    if (req.query.admin !== 'true') {
+        query.visible = { $ne: false };
+    }
+    const product=await Product.findOne(query);
     if(!product) return next(new Error("Product not found",{cause:404}));
     return res.json({
         success:true,
