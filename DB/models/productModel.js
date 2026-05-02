@@ -51,6 +51,10 @@ const productSchema=new Schema({
     discount:{type:Number,default:0},
     
     // percentage discount (e.g., 20 for 20% off) 
+    visible:{
+        type:Boolean,
+        default:true
+    },
 },{timestamps:true});
 
 // ── Virtual: stock ──────────────────────────────────────────────────────────

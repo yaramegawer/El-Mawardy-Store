@@ -45,7 +45,9 @@ export const createProduct = asyncHandler(async (req, res, next) => {
 export const allProducts=asyncHandler(async(req,res,next)=>{
     let page = parseInt(req.query.page) || 1; // Ensure page is a valid number
     //fiter by category and season
-    let filter = {};
+    let filter = {
+        $or: [{ visible: true }, { visible: { $exists: false } }]
+    };
     if (req.query.category) {
         filter.category = req.query.category;
     }
@@ -79,7 +81,10 @@ export const allProducts=asyncHandler(async(req,res,next)=>{
 });
 
 export const getProductById=asyncHandler(async(req,res,next)=>{
-    const product=await Product.findById(req.params.id);
+    const product=await Product.findOne({
+        _id: req.params.id,
+        $or: [{ visible: true }, { visible: { $exists: false } }]
+    });
     if(!product) return next(new Error("Product not found",{cause:404}));       
     return res.json({
         success:true,
@@ -110,7 +115,7 @@ export const deleteProduct=asyncHandler(async(req,res,next)=>{
 
 export const updateProduct = asyncHandler(async (req, res, next) => {
 
-    let {name,price,discount,buyPrice,description,colorStock,category,season,size}=req.body;
+    let {name,price,discount,buyPrice,description,colorStock,category,season,size,visible}=req.body;
     // Check if the product exists
     const product = await Product.findById(req.params.id);
     if (!product) {
@@ -123,7 +128,7 @@ export const updateProduct = asyncHandler(async (req, res, next) => {
         price=price-discountAmount;
     }
 
-    const updatedProduct=await Product.findByIdAndUpdate(req.params.id,{name,price,buyPrice,description,colorStock,category,season,size,discount},{new:true})
+    const updatedProduct=await Product.findByIdAndUpdate(req.params.id,{name,price,buyPrice,description,colorStock,category,season,size,discount,visible},{new:true})
 
     return res.json({
         success: true,
@@ -203,7 +208,10 @@ export const updateProductImages = asyncHandler(async (req, res, next) => {
 export const searchByCode=asyncHandler(async(req,res,next)=>{
     const {code}=req.query;
     if(!code) return next(new Error("code is required",{cause:400}));
-    const product=await Product.findOne({code});
+    const product=await Product.findOne({
+        code,
+        $or: [{ visible: true }, { visible: { $exists: false } }]
+    });
     if(!product) return next(new Error("Product not found",{cause:404}));
     return res.json({
         success:true,
