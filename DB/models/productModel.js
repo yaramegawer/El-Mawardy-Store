@@ -49,7 +49,7 @@ const productSchema=new Schema({
     category:{type:String,required:true},
     season:{type:String,required:true},
     discount:{type:Number,default:0},
-    
+    visible:{type:Boolean,default:true},
     // percentage discount (e.g., 20 for 20% off) 
 },{timestamps:true});
 
