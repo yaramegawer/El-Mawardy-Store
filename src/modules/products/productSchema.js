@@ -15,7 +15,6 @@ export const createProduct=joi.object({
     description:joi.string().default(" "),
     category:joi.string().required(),
     season:joi.string().required(),
-    visible:joi.boolean().default(true),
 }).required();
 
 export const deleteProduct=joi.object({
@@ -37,7 +36,6 @@ export const updateProduct=joi.object({
     category:joi.string(),
     season:joi.string(),
     discount:joi.number().min(0).max(100).optional(), // percentage discount (e.g., 20 for 20% off)
-    visible:joi.boolean().optional(),
 }).required();
 
 export const updateProductImages=joi.object({

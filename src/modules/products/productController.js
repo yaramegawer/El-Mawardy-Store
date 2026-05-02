@@ -53,12 +53,6 @@ export const allProducts=asyncHandler(async(req,res,next)=>{
         filter.season = req.query.season;
     }
 
-    // Filter by visibility - only show visible products by default
-    // Admin can override with includeHidden=true query parameter
-    if (req.query.includeHidden !== 'true') {
-        filter.visible = true;
-    }
-
     page = page < 1 ? 1 : page; // Prevent negative or zero pages
 
     const limit = 20; // Set the correct number of products per page
@@ -116,7 +110,7 @@ export const deleteProduct=asyncHandler(async(req,res,next)=>{
 
 export const updateProduct = asyncHandler(async (req, res, next) => {
 
-    let {name,price,discount,buyPrice,description,colorStock,category,season,size,visible}=req.body;
+    let {name,price,discount,buyPrice,description,colorStock,category,season,size}=req.body;
     // Check if the product exists
     const product = await Product.findById(req.params.id);
     if (!product) {
@@ -129,7 +123,7 @@ export const updateProduct = asyncHandler(async (req, res, next) => {
         price=price-discountAmount;
     }
 
-    const updatedProduct=await Product.findByIdAndUpdate(req.params.id,{name,price,buyPrice,description,colorStock,category,season,size,discount,visible},{new:true})
+    const updatedProduct=await Product.findByIdAndUpdate(req.params.id,{name,price,buyPrice,description,colorStock,category,season,size,discount},{new:true})
 
     return res.json({
         success: true,
