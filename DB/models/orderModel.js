@@ -4,7 +4,7 @@ const orderSchema = new Schema(
   {
     customerName: { type: String, required: true },
     phone:        { type: String, required: true },
-    email:        { type: String, required: true },
+    email:        { type: String },
     address:      { type: String, required: true },
     government:   { type: String, required: true },
 

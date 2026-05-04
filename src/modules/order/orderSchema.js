@@ -14,7 +14,7 @@ export const createOrder = joi.object({
   ).min(1).required(),
   customerName:         joi.string().required(),
   phone:                joi.string().required(),
-  email:                joi.string().email().required(),
+  email:                joi.string().email().optional(),
   address:              joi.string().required(),
   government:           joi.string().required(),
   shippingCost:         joi.number().min(0).required(),
