@@ -26,6 +26,10 @@ const treasurySchema = new Schema(
     totalRealizedProfit: { type: Number, default: 0 }, // Total realized profit to date
     totalTreasury: { type: Number, default: 0 }, // Net cash position (assets - liabilities)
     
+    // Manual finance controls
+    capitalMoney: { type: Number, default: 0 }, // Total capital invested (manually adjustable)
+    availableCash: { type: Number, default: 0 }, // Available cash on hand (manually adjustable)
+    
     // Order counts
     ordersCreated: { type: Number, default: 0 }, // Orders created today
     ordersDelivered: { type: Number, default: 0 }, // Orders delivered today

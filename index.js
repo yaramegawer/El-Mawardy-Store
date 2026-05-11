@@ -7,6 +7,7 @@ import productRouter from './src/modules/products/productRouter.js';
 import orderRouter from './src/modules/order/orderRouter.js';
 import expenseRouter from './src/modules/expense/expenseRouter.js';
 import purchaseRouter from './src/modules/purchase/purchaseRouter.js';
+import treasuryRouter from './src/modules/treasury/treasuryRouter.js';
 const app = express()
 
 dotenv.config();
@@ -22,6 +23,7 @@ app.use('/product',productRouter)
 app.use('/order',orderRouter)
 app.use('/expense',expenseRouter)
 app.use('/purchase',purchaseRouter)
+app.use('/treasury',treasuryRouter)
 
 
 app.use('*', (req, res,next) =>{

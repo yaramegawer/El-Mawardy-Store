@@ -1,5 +1,6 @@
 import TreasuryService from "../../services/treasuryService.js";
 import { asyncHandler } from "../../utils/asyncHandler.js";
+import { Treasury } from './../../../DB/models/treasuryModel.js';
 
 export const getTreasurySummary = asyncHandler(async (req, res, next) => {
   const { startDate, endDate } = req.query;
@@ -69,5 +70,29 @@ export const getTreasuryHistory = asyncHandler(async (req, res, next) => {
     success: true,
     message: "Treasury history retrieved successfully",
     data: treasuryRecords,
+  });
+});
+
+export const updateFinance = asyncHandler(async (req, res, next) => {
+  const { capitalMoney, availableCash } = req.body;
+  
+  const updateData = {};
+  if (capitalMoney !== undefined) {
+    updateData.capitalMoney = capitalMoney;
+  }
+  if (availableCash !== undefined) {
+    updateData.availableCash = availableCash;
+  }
+  
+  const treasury = await Treasury.findOneAndUpdate(
+    { date: { $gte: new Date().setHours(0, 0, 0, 0) } },
+    updateData,
+    { new: true, upsert: true }
+  );
+  
+  res.json({
+    success: true,
+    message: "Finance data updated successfully",
+    data: treasury,
   });
 });
