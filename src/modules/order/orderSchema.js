@@ -55,6 +55,12 @@ export const deleteOrder = joi.object({
 export const returnOrder = joi.object({
   id:           joi.string().custom(isValidObjectId).required(),
   returnReason: joi.string().trim().min(1).required(),
+  returnItems: joi.array().items(
+    joi.object({
+      lineItemId: joi.string().custom(isValidObjectId).required(),
+      quantity: joi.number().integer().min(1).required(),
+    })
+  ).optional(), // If omitted, all items are returned (full return)
 });
 
 export const exchangeOrderProducts = joi.object({

@@ -484,9 +484,9 @@ export const deleteOrder = asyncHandler(async (req, res, next) => {
   res.json({ success: true, message: "Order deleted successfully" });
 });
 
-// PATCH /api/orders/:id/return — full refund with stock restoration
+// PATCH /api/orders/:id/return — partial or full refund with stock restoration
 export const returnOrder = asyncHandler(async (req, res, next) => {
-  const { returnReason } = req.body;
+  const { returnReason, returnItems } = req.body;
   
   // Validation
   if (!returnReason || returnReason.trim().length === 0) {
@@ -496,62 +496,127 @@ export const returnOrder = asyncHandler(async (req, res, next) => {
   const order = await Order.findById(req.params.id);
   if (!order) return next(new Error("Order not found!", { cause: 404 }));
 
-  if (order.isReturned) {
-    return next(new Error("Order has already been returned", { cause: 400 }));
-  }
-
   if (order.status === "cancelled") {
     return next(new Error("Cannot return a cancelled order", { cause: 400 }));
   }
 
-  // Only restore stock if the deposit was confirmed (i.e. stock was actually
-  // decremented when the deposit was confirmed). Returning an unconfirmed order
-  // should never touch stock.
+  // Determine if this is a partial or full return
+  const isPartialReturn = returnItems && Array.isArray(returnItems) && returnItems.length > 0;
+
+  let totalReturnedQuantity = 0;
+  let returnAmount = 0;
+
+  // Only restore stock if the deposit was confirmed
   let stockRestored = 0;
   if (order.depositConfirmed) {
     try {
-      for (const item of order.products) {
-        if (item.color) {
-          await Product.findOneAndUpdate(
-            { _id: item.productId, "colorStock.color": item.color },
-            { $inc: { "colorStock.$.stock": item.quantity } }
+      if (isPartialReturn) {
+        // Partial return: process only specified items
+        for (const returnItem of returnItems) {
+          const { lineItemId, quantity } = returnItem;
+          
+          // Find the line item by _id
+          const lineItem = order.products.find(
+            (p) => p._id && p._id.toString() === lineItemId.toString()
           );
-        } else {
-          await Product.findOneAndUpdate(
-            { _id: item.productId, "colorStock.0": { $exists: true } },
-            { $inc: { "colorStock.0.stock": item.quantity } }
-          );
+          
+          if (!lineItem) {
+            return next(new Error(`Line item with id ${lineItemId} not found`, { cause: 404 }));
+          }
+          
+          // Check if quantity to return doesn't exceed available (original - already returned)
+          const availableToReturn = lineItem.quantity - (lineItem.returnedQuantity || 0);
+          if (quantity > availableToReturn) {
+            return next(
+              new Error(
+                `Cannot return ${quantity} items — only ${availableToReturn} available for this line item`,
+                { cause: 400 }
+              )
+            );
+          }
+          
+          // Update returnedQuantity
+          lineItem.returnedQuantity = (lineItem.returnedQuantity || 0) + quantity;
+          
+          // Calculate return amount for this item (proportional to quantity)
+          const itemReturnAmount = lineItem.finalPrice * quantity;
+          returnAmount += itemReturnAmount;
+          
+          // Restore stock for the specific color variant
+          if (lineItem.color) {
+            await Product.findOneAndUpdate(
+              { _id: lineItem.productId, "colorStock.color": lineItem.color },
+              { $inc: { "colorStock.$.stock": quantity } }
+            );
+          } else {
+            await Product.findOneAndUpdate(
+              { _id: lineItem.productId, "colorStock.0": { $exists: true } },
+              { $inc: { "colorStock.0.stock": quantity } }
+            );
+          }
+          
+          totalReturnedQuantity += quantity;
+          stockRestored += quantity;
         }
+      } else {
+        // Full return: return all items
+        for (const item of order.products) {
+          if (item.color) {
+            await Product.findOneAndUpdate(
+              { _id: item.productId, "colorStock.color": item.color },
+              { $inc: { "colorStock.$.stock": item.quantity } }
+            );
+          } else {
+            await Product.findOneAndUpdate(
+              { _id: item.productId, "colorStock.0": { $exists: true } },
+              { $inc: { "colorStock.0.stock": item.quantity } }
+            );
+          }
+          item.returnedQuantity = item.quantity;
+          totalReturnedQuantity += item.quantity;
+        }
+        stockRestored = order.itemsCount || 0;
+        returnAmount = order.totalPrice;
       }
-      stockRestored = order.itemsCount || 0;
     } catch (error) {
       return next(new Error("Failed to restore stock during return process", { cause: 500 }));
     }
   }
 
-  const returnAmount = order.totalPrice;
-
   // Update order with return information
-order.isReturned = true;
-order.status = "returned";
-order.paymentStatus = "deposit_returned";
-
-order.returnAmount = order.totalPrice;
-order.returnReason = returnReason.trim();
-order.returnDate = new Date();
-order.refundStatus = "pending";
+  const hasAnyReturnedItems = order.products.some(p => (p.returnedQuantity || 0) > 0);
+  const allItemsReturned = order.products.every(p => (p.returnedQuantity || 0) === p.quantity);
+  
+  order.isReturned = allItemsReturned; // Only mark as fully returned if all items are returned
+  order.returnReason = returnReason.trim();
+  order.returnDate = new Date();
+  order.refundStatus = "pending";
+  
+  // Update return amount (cumulative for multiple partial returns)
+  order.returnAmount = (order.returnAmount || 0) + returnAmount;
+  
+  // Update status based on whether all items are returned
+  if (allItemsReturned) {
+    order.status = "returned";
+    order.paymentStatus = "deposit_returned";
+  }
 
   await order.save();
 
   res.json({
     success: true,
-    message: `Order returned successfully${stockRestored > 0 ? ` and ${stockRestored} items restored to stock` : ""}`,
+    message: isPartialReturn 
+      ? `Partial return processed: ${totalReturnedQuantity} items returned${stockRestored > 0 ? ` and ${stockRestored} items restored to stock` : ""}`
+      : `Order returned successfully${stockRestored > 0 ? ` and ${stockRestored} items restored to stock` : ""}`,
     data: {
       orderId: order._id,
       returnAmount: returnAmount.toFixed(2),
+      totalReturnAmount: order.returnAmount.toFixed(2),
       returnReason: order.returnReason,
       refundStatus: order.refundStatus,
       stockRestored,
+      totalReturnedQuantity,
+      isPartialReturn: !allItemsReturned,
       returnDate: order.returnDate,
     },
   });
