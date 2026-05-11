@@ -279,24 +279,41 @@ export const getFinanceAnalytics = asyncHandler(async (req, res) => {
   let totalSoldItems = 0;
 
   orders.forEach((order) => {
-    // Calculate net sales: 
-    // - Include all orders that were originally sold (pending, confirmed, shipped, delivered)
-    // - Include exchanged orders since original sale was made
-    // - Exclude returned orders (money was refunded)
-    // - Exclude cancelled orders (no sale was made)
-    if (order.status !== "cancelled" && 
-        order.status !== "returned" && 
-        !order.isReturned) {
-      // Add sales for orders where money was collected
-      netSales += order.itemsPrice || 0;
-      // Add items count for sold items
-      totalSoldItems += order.itemsCount || 0;
+    // Skip cancelled orders entirely
+    if (order.status === "cancelled") {
+      return;
     }
 
-    // Calculate profit for delivered orders only
+    // Calculate returned items and their value (for partial returns)
+    let totalReturnedQuantity = 0;
+    let totalReturnedValue = 0;
+    let totalReturnedCost = 0;
+
+    if (order.products && order.products.length > 0) {
+      order.products.forEach(product => {
+        const returnedQty = product.returnedQuantity || 0;
+        if (returnedQty > 0) {
+          totalReturnedQuantity += returnedQty;
+          totalReturnedValue += (product.finalPrice || 0) * returnedQty;
+          totalReturnedCost += (product.costPrice || 0) * returnedQty;
+        }
+      });
+    }
+
+    // Calculate net sales: subtract returned items value
+    const actualItemsPrice = (order.itemsPrice || 0) - totalReturnedValue;
+    const actualItemsCount = (order.itemsCount || 0) - totalReturnedQuantity;
+
+    // Only count sales if the order is not fully returned
+    if (!order.isReturned) {
+      netSales += actualItemsPrice;
+      totalSoldItems += actualItemsCount;
+    }
+
+    // Calculate profit for delivered orders only, accounting for partial returns
     if (order.status === "delivered") {
-      const sellingPrice = order.priceWithoutShipping || 0;
-      const buyingPrice = order.totalCost || 0;
+      const sellingPrice = (order.priceWithoutShipping || 0) - totalReturnedValue;
+      const buyingPrice = (order.totalCost || 0) - totalReturnedCost;
       const orderProfit = sellingPrice - buyingPrice;
       
       deliveredOrdersProfit += orderProfit;
