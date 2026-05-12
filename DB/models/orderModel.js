@@ -24,7 +24,6 @@ const orderSchema = new Schema(
         costPrice:          { type: Number, required: true },  // snapshot buy price
         color:              { type: String },
         size:               { type: String },
-        returnedQuantity:   { type: Number, default: 0 },     // quantity returned for this line item
       },
     ],
 
