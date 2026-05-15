@@ -2,6 +2,7 @@ import TreasuryService from "../../services/treasuryService.js";
 import FinanceService from "../../services/financeService.js";
 import { asyncHandler } from "../../utils/asyncHandler.js";
 import { Treasury } from './../../../DB/models/treasuryModel.js';
+import { Product } from './../../../DB/models/productModel.js';
 
 export const getTreasurySummary = asyncHandler(async (req, res, next) => {
   const { startDate, endDate } = req.query;
@@ -77,16 +78,10 @@ export const getTreasuryHistory = asyncHandler(async (req, res, next) => {
 export const updateFinance = asyncHandler(async (req, res, next) => {
   const { capitalMoney, availableCash } = req.body;
 
-  const settings = await FinanceService.updateSettings({
-    cashBaseline: availableCash,
-    capitalMoney,
-  });
-
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
 
   const treasuryUpdate = {};
-  if (capitalMoney !== undefined) treasuryUpdate.capitalMoney = capitalMoney;
   if (availableCash !== undefined) treasuryUpdate.availableCash = availableCash;
 
   let treasury = null;
@@ -96,6 +91,30 @@ export const updateFinance = asyncHandler(async (req, res, next) => {
       treasuryUpdate,
       { new: true, upsert: true }
     );
+  }
+
+  // Calculate total inventory value
+  const products = await Product.find({ visible: { $ne: false } });
+  let totalInventoryValue = 0;
+  products.forEach((product) => {
+    const stock = product.stock || 0;
+    const buyPrice = product.buyPrice || 0;
+    totalInventoryValue += stock * buyPrice;
+  });
+
+  // Calculate capital as inventory + available cash
+  const calculatedCapital = totalInventoryValue + (treasury?.availableCash || 0);
+
+  // Update finance settings with calculated capital
+  const settings = await FinanceService.updateSettings({
+    cashBaseline: availableCash,
+    capitalMoney: calculatedCapital,
+  });
+
+  // Also update treasury with calculated capital
+  if (treasury) {
+    treasury.capitalMoney = calculatedCapital;
+    await treasury.save();
   }
 
   res.json({
@@ -108,6 +127,7 @@ export const updateFinance = asyncHandler(async (req, res, next) => {
         capitalMoney: settings.capitalMoney,
       },
       treasury,
+      totalInventoryValue,
     },
   });
 });

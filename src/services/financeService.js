@@ -2,6 +2,7 @@ import { FinanceSettings } from "../../DB/models/financeSettingsModel.js";
 import { InventoryPurchase } from "../../DB/models/inventoryPurchaseModel.js";
 import { Order } from "../../DB/models/orderModel.js";
 import { Expense } from "../../DB/models/expenseModel.js";
+import { Product } from "../../DB/models/productModel.js";
 
 const GLOBAL_KEY = "global";
 
@@ -76,6 +77,19 @@ class FinanceService {
     return { total, count: expenses.length };
   }
 
+  static async calculateTotalInventoryValue() {
+    const products = await Product.find({ visible: { $ne: false } });
+    let totalInventoryValue = 0;
+
+    products.forEach((product) => {
+      const stock = product.stock || 0;
+      const buyPrice = product.buyPrice || 0;
+      totalInventoryValue += stock * buyPrice;
+    });
+
+    return totalInventoryValue;
+  }
+
   static async computeAnalytics(startDate, endDate) {
     const orderFilter = buildDateRangeFilter("createdAt", startDate, endDate);
     const expenseFilter = buildDateRangeFilter("date", startDate, endDate);
@@ -126,7 +140,7 @@ class FinanceService {
   static async getOverview(startDate, endDate) {
     const settings = await this.getOrCreateSettings();
 
-    const [deliveredSales, inventory, expenseTotals, analytics] =
+    const [deliveredSales, inventory, expenseTotals, analytics, totalInventoryValue] =
       await Promise.all([
         this.computeDeliveredSalesAfterBaseline(
           startDate,
@@ -136,6 +150,7 @@ class FinanceService {
         this.sumInventoryPurchases(startDate, endDate),
         this.sumExpenses(startDate, endDate),
         this.computeAnalytics(startDate, endDate),
+        this.calculateTotalInventoryValue(),
       ]);
 
     const availableCash =
@@ -144,11 +159,14 @@ class FinanceService {
       inventory.total -
       expenseTotals.total;
 
+    // Calculate capital as inventory + available cash
+    const calculatedCapital = totalInventoryValue + availableCash;
+
     return {
       settings: {
         cashBaseline: settings.cashBaseline,
         cashBaselineAt: settings.cashBaselineAt,
-        capitalMoney: settings.capitalMoney,
+        capitalMoney: calculatedCapital,
       },
       availableCash: {
         total: availableCash,
@@ -160,7 +178,8 @@ class FinanceService {
         expenses: expenseTotals.total,
         expenseCount: expenseTotals.count,
       },
-      capitalMoney: settings.capitalMoney,
+      capitalMoney: calculatedCapital,
+      totalInventoryValue,
       analytics,
       filter: { startDate: startDate || null, endDate: endDate || null },
     };

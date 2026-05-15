@@ -2,6 +2,7 @@ import { Treasury } from "../../DB/models/treasuryModel.js";
 import { Order } from "../../DB/models/orderModel.js";
 import { Expense } from "../../DB/models/expenseModel.js";
 import { Purchase } from "../../DB/models/purchaseModel.js";
+import { Product } from "../../DB/models/productModel.js";
 
 class TreasuryService {
   /**
@@ -113,6 +114,22 @@ class TreasuryService {
   }
 
   /**
+   * Calculate total inventory value from products (stock * buyPrice)
+   */
+  static async calculateTotalInventoryValue() {
+    const products = await Product.find({ visible: { $ne: false } });
+    let totalInventoryValue = 0;
+
+    products.forEach((product) => {
+      const stock = product.stock || 0;
+      const buyPrice = product.buyPrice || 0;
+      totalInventoryValue += stock * buyPrice;
+    });
+
+    return totalInventoryValue;
+  }
+
+  /**
    * Recalculate all treasury totals using proper financial logic
    */
   static async recalculateTreasuryTotals(treasury) {
@@ -130,6 +147,10 @@ class TreasuryService {
     
     // Daily Treasury = Net Profit (actual cash position for the day)
     treasury.dailyTreasury = treasury.dailyNetProfit;
+    
+    // Calculate capital as inventory + available cash
+    const totalInventoryValue = await this.calculateTotalInventoryValue();
+    treasury.capitalMoney = totalInventoryValue + treasury.availableCash;
     
     // Update cumulative totals
     const yesterday = new Date(treasury.date);
