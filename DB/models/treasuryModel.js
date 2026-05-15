@@ -46,5 +46,5 @@ const treasurySchema = new Schema(
 // Index for efficient queries
 treasurySchema.index({ date: 1 });
 treasurySchema.index({ lastUpdated: -1 });
-
+//comment
 export const Treasury = model("Treasury", treasurySchema);

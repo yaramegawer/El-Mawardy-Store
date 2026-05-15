@@ -1,4 +1,5 @@
 import TreasuryService from "../../services/treasuryService.js";
+import FinanceService from "../../services/financeService.js";
 import { asyncHandler } from "../../utils/asyncHandler.js";
 import { Treasury } from './../../../DB/models/treasuryModel.js';
 
@@ -75,24 +76,38 @@ export const getTreasuryHistory = asyncHandler(async (req, res, next) => {
 
 export const updateFinance = asyncHandler(async (req, res, next) => {
   const { capitalMoney, availableCash } = req.body;
-  
-  const updateData = {};
-  if (capitalMoney !== undefined) {
-    updateData.capitalMoney = capitalMoney;
+
+  const settings = await FinanceService.updateSettings({
+    cashBaseline: availableCash,
+    capitalMoney,
+  });
+
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+
+  const treasuryUpdate = {};
+  if (capitalMoney !== undefined) treasuryUpdate.capitalMoney = capitalMoney;
+  if (availableCash !== undefined) treasuryUpdate.availableCash = availableCash;
+
+  let treasury = null;
+  if (Object.keys(treasuryUpdate).length > 0) {
+    treasury = await Treasury.findOneAndUpdate(
+      { date: { $gte: startOfDay } },
+      treasuryUpdate,
+      { new: true, upsert: true }
+    );
   }
-  if (availableCash !== undefined) {
-    updateData.availableCash = availableCash;
-  }
-  
-  const treasury = await Treasury.findOneAndUpdate(
-    { date: { $gte: new Date().setHours(0, 0, 0, 0) } },
-    updateData,
-    { new: true, upsert: true }
-  );
-  
+
   res.json({
     success: true,
     message: "Finance data updated successfully",
-    data: treasury,
+    data: {
+      settings: {
+        cashBaseline: settings.cashBaseline,
+        cashBaselineAt: settings.cashBaselineAt,
+        capitalMoney: settings.capitalMoney,
+      },
+      treasury,
+    },
   });
 });

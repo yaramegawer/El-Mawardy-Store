@@ -11,6 +11,7 @@ import { Expense } from "../../../DB/models/expenseModel.js";
 import { Treasury } from "../../../DB/models/treasuryModel.js";
 import { Purchase } from "../../../DB/models/purchaseModel.js";
 import { asyncHandler } from "../../utils/asyncHandler.js";
+import FinanceService from "../../services/financeService.js";
 import { Types } from "mongoose";
 
 
@@ -245,87 +246,17 @@ const restoreOrderStock = async (order) => {
 
 export const getFinanceAnalytics = asyncHandler(async (req, res) => {
   const { startDate, endDate } = req.query;
+  const data = await FinanceService.getOverview(startDate, endDate);
 
-  const createDateFilter = (field) => {
-    const filter = {};
-    if (startDate || endDate) {
-      filter[field] = {};
-      if (startDate) filter[field].$gte = new Date(startDate);
-      if (endDate) filter[field].$lte = new Date(endDate);
-    }
-    return filter;
-  };
-
-  // Fetch only orders and expenses
-  let [orders, expenses] = await Promise.all([
-    Order.find(createDateFilter("createdAt")).populate("products.productId", "name buyPrice stock"),
-    Expense.find(createDateFilter("date"))
-  ]);
-
-  // If no orders found with date filter, fetch all orders
-  if (orders.length === 0) {
-    orders = await Order.find({}).populate("products.productId", "name buyPrice stock");
-  }
-  
-  // If no expenses found with date filter, fetch all expenses
-  if (expenses.length === 0) {
-    expenses = await Expense.find({});
-  }
-
-  // Calculate sales and profit with returns/exchanges impact
-  let netSales = 0;
-  let deliveredOrdersProfit = 0;
-  let deliveredOrdersCount = 0;
-  let totalSoldItems = 0;
-
-  orders.forEach((order) => {
-    // Calculate net sales: 
-    // - Include all orders that were originally sold (pending, confirmed, shipped, delivered)
-    // - Include exchanged orders since original sale was made
-    // - Exclude returned orders (money was refunded)
-    // - Exclude cancelled orders (no sale was made)
-    if (order.status !== "cancelled" && 
-        order.status !== "returned" && 
-        !order.isReturned) {
-      // Add sales for orders where money was collected
-      netSales += order.itemsPrice || 0;
-      // Add items count for sold items
-      totalSoldItems += order.itemsCount || 0;
-    }
-
-    // Calculate profit for delivered orders only
-    if (order.status === "delivered") {
-      const sellingPrice = order.priceWithoutShipping || 0;
-      const buyingPrice = order.totalCost || 0;
-      const orderProfit = sellingPrice - buyingPrice;
-      
-      deliveredOrdersProfit += orderProfit;
-      deliveredOrdersCount++;
-    }
-  });
-
-  // Calculate total expenses
-  const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
-
-  // Final calculation: (selling price - buying price) - expenses
-  const finalProfit = deliveredOrdersProfit - totalExpenses;
-
-  // =============================
-  // SIMPLIFIED RESPONSE
-  // =============================
   res.json({
     success: true,
     message: "Financial analytics retrieved successfully",
     data: {
-      // Sales Data
-      netSales,                 // Net sales (total orders minus returns minus exchanges)
-      totalSoldItems,           // Total number of items sold (excluding cancelled and returned)
-      
-      // Profit Data
-      deliveredOrdersProfit,    // (selling price - buying price) of delivered orders
-      totalExpenses,             // Total expenses
-      finalProfit,               // (selling price - buying price) - expenses
-      deliveredOrdersCount,      // Number of delivered orders
+      ...data.analytics,
+      settings: data.settings,
+      availableCash: data.availableCash,
+      capitalMoney: data.capitalMoney,
+      filter: data.filter,
     },
   });
 });
