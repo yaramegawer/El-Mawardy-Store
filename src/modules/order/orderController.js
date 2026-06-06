@@ -277,15 +277,14 @@ export const updateOrderStatus = asyncHandler(async (req, res, next) => {
   }
 
   if (status === "cancelled") {
-    if (!order.refundStatus || order.refundStatus === "none") {
-      if (order.depositConfirmed) {
-        await restoreOrderStock(order);
-        order.paymentStatus = "deposit_returned"; // Mark deposit as pending refund
-        order.refundStatus = "pending"; // Refund processing status
-        order.returnAmount = order.depositAmount || 0;
-        order.returnReason = "Order cancelled - deposit refund pending";
-        order.refundDate = new Date();
-      }
+    // Always restore stock if deposit was confirmed (stock was decremented at deposit confirmation)
+    if (order.depositConfirmed) {
+      await restoreOrderStock(order);
+      order.paymentStatus = "deposit_returned"; // Mark deposit as pending refund
+      order.refundStatus = "pending"; // Refund processing status
+      order.returnAmount = order.depositAmount || 0;
+      order.returnReason = "Order cancelled - deposit refund pending";
+      order.refundDate = new Date();
     }
     // FINANCIAL ADJUSTMENT: Reverse profit impact when order is cancelled
     // Keep estimatedProfit intact so we have the historical footprint, but
@@ -559,6 +558,21 @@ export const returnOrderItems = asyncHandler(async (req, res, next) => {
     const returnAmount = originalFinalPrice * quantity;
     totalReturnAmount += returnAmount;
 
+    // Restore stock for the returned items (only if deposit was confirmed)
+    if (order.depositConfirmed) {
+      if (originalProduct.color) {
+        await Product.findOneAndUpdate(
+          { _id: originalProduct.productId, "colorStock.color": originalProduct.color },
+          { $inc: { "colorStock.$.stock": quantity } }
+        );
+      } else {
+        await Product.findOneAndUpdate(
+          { _id: originalProduct.productId, "colorStock.0": { $exists: true } },
+          { $inc: { "colorStock.0.stock": quantity } }
+        );
+      }
+    }
+
     returns.push({
       originalLineItemId,
       productId: originalProduct.productId,
@@ -567,22 +581,74 @@ export const returnOrderItems = asyncHandler(async (req, res, next) => {
       originalDiscountPct,
       originalFinalPrice,
       returnAmount,
-      status: "pending",
+      status: "approved",
       requestDate: new Date(),
+      approvedDate: new Date(),
       returnReason: returnReason.trim(),
     });
+
+    // Reduce the quantity in the original line item
+    originalProduct.quantity -= quantity;
   }
 
   // Add returns to the order
   if (!order.returnedProducts) order.returnedProducts = [];
   order.returnedProducts.push(...returns);
 
+  // Recalculate order totals from scratch after return mutations
+  let recalcItemsPrice = 0;
+  let recalcTotalDiscount = 0;
+  let recalcTotalCost = 0;
+  let recalcItemsCount = 0;
+
+  for (const product of order.products) {
+    const sellingPrice = product.price || 0;
+    const discountAmount = product.discountAmount != null
+      ? product.discountAmount
+      : (sellingPrice * (product.discountPercentage || 0)) / 100;
+    const finalPrice = product.finalPrice != null
+      ? product.finalPrice
+      : sellingPrice - discountAmount;
+
+    const qty = product.quantity || 0;
+    if (qty > 0) {
+      recalcItemsPrice += sellingPrice * qty;
+      recalcTotalDiscount += discountAmount * qty;
+      recalcTotalCost += (product.costPrice || 0) * qty;
+      recalcItemsCount += qty;
+    }
+  }
+
+  order.itemsPrice = recalcItemsPrice;
+  order.totalDiscount = recalcTotalDiscount;
+  order.totalCost = recalcTotalCost;
+  order.itemsCount = recalcItemsCount;
+
+  const newItemsRevenue = recalcItemsPrice - recalcTotalDiscount;
+  const newTotalPrice = newItemsRevenue + order.shippingCost;
+
+  order.totalPrice = newTotalPrice;
+  order.priceWithoutShipping = newItemsRevenue;
+
+  // Update profit calculations
+  order.estimatedProfit = newItemsRevenue - recalcTotalCost;
+  if (order.status === "delivered") {
+    order.realizedProfit = newItemsRevenue - recalcTotalCost;
+  } else {
+    order.realizedProfit = null;
+  }
+
+  // Update deposit and due amounts
+  order.depositAmount = newItemsRevenue * 0.5;
+  order.dueAmount = newTotalPrice - order.depositAmount;
+
   // Update order-level fields for backward compatibility
   order.isReturned = true;
   order.returnAmount = totalReturnAmount;
   order.returnReason = returnReason.trim();
   order.returnDate = new Date();
-  order.refundStatus = "pending";
+  order.refundStatus = "processed";
+  order.refundDate = new Date();
 
   await order.save();
 
@@ -597,7 +663,7 @@ export const returnOrderItems = asyncHandler(async (req, res, next) => {
 
   res.json({
     success: true,
-    message: "Return request submitted successfully",
+    message: "Return processed successfully",
     data: {
       orderId: order._id,
       returnSummary,
@@ -605,6 +671,13 @@ export const returnOrderItems = asyncHandler(async (req, res, next) => {
       returnReason: returnReason.trim(),
       refundStatus: order.refundStatus,
       requestDate: new Date(),
+      updatedOrder: {
+        totalPrice: order.totalPrice.toFixed(2),
+        itemsPrice: order.itemsPrice.toFixed(2),
+        dueAmount: order.dueAmount.toFixed(2),
+        depositAmount: order.depositAmount.toFixed(2),
+        itemsCount: order.itemsCount,
+      },
     },
   });
 });
