@@ -25,6 +25,7 @@ export const createOrder = joi.object({
 });
 
 export const updateOrderStatus = joi.object({
+  id: joi.string().custom(isValidObjectId).optional(),
   // FIX: "delivered" and "cancelled" were missing.
   // The controller sets paymentStatus = "completed" on "delivered",
   // so blocking it here would silently prevent that transition.
@@ -37,7 +38,9 @@ export const updateOrderStatus = joi.object({
   notes: joi.string().optional(),
 });
 
-export const confirmDeposit = joi.object({});
+export const confirmDeposit = joi.object({
+  id: joi.string().custom(isValidObjectId).optional(),
+});
 
 export const financeAnalytics = joi.object({
   id:        joi.any().forbidden(),
@@ -45,13 +48,17 @@ export const financeAnalytics = joi.object({
   endDate:   joi.date().optional(),
 });
 
-export const deleteOrder = joi.object({});
+export const deleteOrder = joi.object({
+  id: joi.string().custom(isValidObjectId).optional(),
+});
 
 export const returnOrder = joi.object({
+  id: joi.string().custom(isValidObjectId).optional(),
   returnReason: joi.string().trim().min(1).required(),
 });
 
 export const exchangeOrderProducts = joi.object({
+  id: joi.string().custom(isValidObjectId).optional(),
   exchangeItems: joi.array().items(
     joi.object({
       // FIX: was joi.number().integer() — the controller now looks up line items
@@ -68,6 +75,7 @@ export const exchangeOrderProducts = joi.object({
 });
 
 export const returnOrderItems = joi.object({
+  id: joi.string().custom(isValidObjectId).optional(),
   returnItems: joi.array().items(
     joi.object({
       originalLineItemId: joi.string().custom(isValidObjectId).required(),
@@ -78,27 +86,33 @@ export const returnOrderItems = joi.object({
 });
 
 export const approveReturn = joi.object({
+  id: joi.string().custom(isValidObjectId).optional(),
   returnId: joi.string().custom(isValidObjectId).required(),
 });
 
 export const rejectReturn = joi.object({
+  id: joi.string().custom(isValidObjectId).optional(),
   returnId: joi.string().custom(isValidObjectId).required(),
   rejectionReason: joi.string().optional(),
 });
 
 export const completeReturn = joi.object({
+  id: joi.string().custom(isValidObjectId).optional(),
   returnId: joi.string().custom(isValidObjectId).required(),
 });
 
 export const approveExchange = joi.object({
+  id: joi.string().custom(isValidObjectId).optional(),
   exchangeId: joi.string().custom(isValidObjectId).required(),
 });
 
 export const rejectExchange = joi.object({
+  id: joi.string().custom(isValidObjectId).optional(),
   exchangeId: joi.string().custom(isValidObjectId).required(),
   rejectionReason: joi.string().optional(),
 });
 
 export const completeExchange = joi.object({
+  id: joi.string().custom(isValidObjectId).optional(),
   exchangeId: joi.string().custom(isValidObjectId).required(),
 });
