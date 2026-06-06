@@ -73,3 +73,46 @@ export const exchangeOrderProducts = joi.object({
   ).min(1).required(),
   exchangeReason: joi.string().trim().min(1).required(),
 });
+
+export const returnOrderItems = joi.object({
+  id: joi.string().custom(isValidObjectId).required(),
+  returnItems: joi.array().items(
+    joi.object({
+      originalLineItemId: joi.string().custom(isValidObjectId).required(),
+      quantity:           joi.number().integer().min(1).required(),
+    })
+  ).min(1).required(),
+  returnReason: joi.string().trim().min(1).required(),
+});
+
+export const approveReturn = joi.object({
+  id: joi.string().custom(isValidObjectId).required(),
+  returnId: joi.string().custom(isValidObjectId).required(),
+});
+
+export const rejectReturn = joi.object({
+  id: joi.string().custom(isValidObjectId).required(),
+  returnId: joi.string().custom(isValidObjectId).required(),
+  rejectionReason: joi.string().optional(),
+});
+
+export const completeReturn = joi.object({
+  id: joi.string().custom(isValidObjectId).required(),
+  returnId: joi.string().custom(isValidObjectId).required(),
+});
+
+export const approveExchange = joi.object({
+  id: joi.string().custom(isValidObjectId).required(),
+  exchangeId: joi.string().custom(isValidObjectId).required(),
+});
+
+export const rejectExchange = joi.object({
+  id: joi.string().custom(isValidObjectId).required(),
+  exchangeId: joi.string().custom(isValidObjectId).required(),
+  rejectionReason: joi.string().optional(),
+});
+
+export const completeExchange = joi.object({
+  id: joi.string().custom(isValidObjectId).required(),
+  exchangeId: joi.string().custom(isValidObjectId).required(),
+});

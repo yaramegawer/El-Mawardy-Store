@@ -60,12 +60,41 @@ const orderSchema = new Schema(
     notes:  { type: String },
 
     // ── Returns ────────────────────────────────────────────────────────────────
+    // Order-level fields (deprecated - kept for backward compatibility)
     isReturned:   { type: Boolean, default: false },
     returnAmount: { type: Number,  default: 0 },
     returnReason: { type: String },
     returnDate:   { type: Date },
     refundStatus: { type: String, enum: ["none", "pending", "processed"], default: "none" },
     refundDate:   { type: Date },
+
+    // Item-level returns (new implementation)
+    returnedProducts: [
+      {
+        originalLineItemId: { type: Types.ObjectId, required: true }, // Reference to order.products._id
+        productId:          { type: Types.ObjectId, ref: "Product", required: true },
+        quantity:           { type: Number, required: true },
+
+        // Price snapshot at time of return
+        originalSellingPrice: { type: Number }, // pre-discount selling price per unit
+        originalDiscountPct:  { type: Number, default: 0 },
+        originalFinalPrice:   { type: Number }, // post-discount price per unit (what was charged)
+
+        // Return calculation
+        returnAmount: { type: Number, required: true }, // quantity * originalFinalPrice
+
+        // Status tracking
+        status: { type: String, enum: ["pending", "approved", "rejected", "completed"], default: "pending" },
+
+        // Dates
+        requestDate:  { type: Date, default: Date.now },
+        approvedDate: { type: Date },
+        completedDate: { type: Date },
+
+        // Reason
+        returnReason: { type: String, required: true },
+      },
+    ],
 
     // ── Exchanges ──────────────────────────────────────────────────────────────
     isExchanged: { type: Boolean, default: false },
@@ -77,9 +106,10 @@ const orderSchema = new Schema(
     // Old stale field `exchangeProductId` (single ObjectId, never written) removed.
     exchangedProducts: [
       {
-        originalProductId:   { type: Types.ObjectId, ref: "Product" },
-        newProductId:        { type: Types.ObjectId, ref: "Product" },
-        quantity:            { type: Number },
+        originalLineItemId: { type: Types.ObjectId, required: true }, // Reference to order.products._id
+        originalProductId:   { type: Types.ObjectId, ref: "Product", required: true },
+        newProductId:        { type: Types.ObjectId, ref: "Product", required: true },
+        quantity:            { type: Number, required: true },
 
         // Original line item prices at time of exchange
         originalSellingPrice: { type: Number }, // pre-discount selling price per unit
@@ -94,7 +124,17 @@ const orderSchema = new Schema(
         // (newFinalPrice - originalFinalPrice) × quantity — positive means customer owes more
         priceAdjustment: { type: Number, default: 0 },
 
-        exchangeDate: { type: Date, default: Date.now },
+        // Status tracking
+        status: { type: String, enum: ["pending", "approved", "rejected", "completed"], default: "pending" },
+
+        // Dates
+        requestDate:  { type: Date, default: Date.now },
+        approvedDate: { type: Date },
+        completedDate: { type: Date },
+
+        // Variant information
+        newColor: { type: String },
+        newSize:  { type: String },
       },
     ],
     priceWithoutShipping:Number,

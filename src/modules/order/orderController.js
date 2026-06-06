@@ -415,7 +415,7 @@ export const deleteOrder = asyncHandler(async (req, res, next) => {
   res.json({ success: true, message: "Order deleted successfully" });
 });
 
-// PATCH /api/orders/:id/return — full refund with stock restoration
+// PATCH /api/orders/:id/return — full refund with stock restoration (legacy - kept for backward compatibility)
 export const returnOrder = asyncHandler(async (req, res, next) => {
   const { returnReason } = req.body;
   
@@ -484,6 +484,127 @@ order.refundStatus = "pending";
       refundStatus: order.refundStatus,
       stockRestored,
       returnDate: order.returnDate,
+    },
+  });
+});
+
+// PATCH /api/orders/:id/return-items — item-level return request
+export const returnOrderItems = asyncHandler(async (req, res, next) => {
+  const { returnItems, returnReason } = req.body;
+
+  // Validation
+  if (!returnItems || !Array.isArray(returnItems) || returnItems.length === 0) {
+    return next(new Error("Return items array is required", { cause: 400 }));
+  }
+  
+  if (!returnReason || returnReason.trim().length === 0) {
+    return next(new Error("Return reason is required", { cause: 400 }));
+  }
+
+  // returnItems: [{ originalLineItemId, quantity }]
+  const order = await Order.findById(req.params.id);
+  if (!order) return next(new Error("Order not found!", { cause: 404 }));
+
+  if (order.status === "cancelled") {
+    return next(new Error("Cannot return items from a cancelled order", { cause: 400 }));
+  }
+
+  const returns = [];
+  let totalReturnAmount = 0;
+
+  for (const returnItem of returnItems) {
+    const { originalLineItemId, quantity } = returnItem;
+
+    // Find the original line item
+    const originalProduct = order.products.find(
+      (p) => p._id && p._id.toString() === originalLineItemId.toString()
+    );
+    if (!originalProduct) {
+      const available = order.products.map((p) => p._id?.toString()).join(", ");
+      return next(
+        new Error(
+          `Order line item with id ${originalLineItemId} not found. Available line item ids: [${available}]`,
+          { cause: 404 }
+        )
+      );
+    }
+
+    // Check if quantity is valid
+    if (quantity > originalProduct.quantity) {
+      return next(
+        new Error(
+          `Cannot return ${quantity} items — only ${originalProduct.quantity} in order`,
+          { cause: 400 }
+        )
+      );
+    }
+
+    // Check if this item has already been returned
+    const alreadyReturned = (order.returnedProducts || []).find(
+      (rp) => rp.originalLineItemId.toString() === originalLineItemId.toString()
+    );
+    if (alreadyReturned) {
+      return next(
+        new Error(
+          `Item with id ${originalLineItemId} has already been returned`,
+          { cause: 400 }
+        )
+      );
+    }
+
+    // Calculate return amount
+    const originalSellingPrice = originalProduct.price || 0;
+    const originalDiscountPct = originalProduct.discountPercentage || 0;
+    const originalFinalPrice = originalProduct.finalPrice || originalSellingPrice;
+    const returnAmount = originalFinalPrice * quantity;
+    totalReturnAmount += returnAmount;
+
+    returns.push({
+      originalLineItemId,
+      productId: originalProduct.productId,
+      quantity,
+      originalSellingPrice,
+      originalDiscountPct,
+      originalFinalPrice,
+      returnAmount,
+      status: "pending",
+      requestDate: new Date(),
+      returnReason: returnReason.trim(),
+    });
+  }
+
+  // Add returns to the order
+  if (!order.returnedProducts) order.returnedProducts = [];
+  order.returnedProducts.push(...returns);
+
+  // Update order-level fields for backward compatibility
+  order.isReturned = true;
+  order.returnAmount = totalReturnAmount;
+  order.returnReason = returnReason.trim();
+  order.returnDate = new Date();
+  order.refundStatus = "pending";
+
+  await order.save();
+
+  const returnSummary = returns.map((r) => ({
+    originalLineItemId: r.originalLineItemId,
+    productId: r.productId,
+    quantity: r.quantity,
+    originalFinalPricePerUnit: r.originalFinalPrice.toFixed(2),
+    returnAmount: r.returnAmount.toFixed(2),
+    status: r.status,
+  }));
+
+  res.json({
+    success: true,
+    message: "Return request submitted successfully",
+    data: {
+      orderId: order._id,
+      returnSummary,
+      totalReturnAmount: totalReturnAmount.toFixed(2),
+      returnReason: returnReason.trim(),
+      refundStatus: order.refundStatus,
+      requestDate: new Date(),
     },
   });
 });
@@ -658,6 +779,7 @@ export const exchangeOrderProducts = asyncHandler(async (req, res, next) => {
     // Audit log — store both the pre-discount selling price AND the final
     // (post-discount) price so the dashboard can display either.
     exchanges.push({
+      originalLineItemId: originalProduct._id,
       originalProductId: originalProduct.productId,
       newProductId,
       quantity,
@@ -668,6 +790,10 @@ export const exchangeOrderProducts = asyncHandler(async (req, res, next) => {
       newDiscountPct,
       newFinalPrice,        // what the customer will be charged per unit
       priceAdjustment,      // (newFinalPrice - originalFinalPrice) * quantity
+      status: "pending",
+      requestDate: new Date(),
+      newColor: resolvedNewColor,
+      newSize: newSize || (Array.isArray(newProduct.size) ? newProduct.size[0] : newProduct.size),
     });
 
     totalPriceAdjustment += priceAdjustment;
@@ -798,6 +924,250 @@ if (order.status === "delivered") {
       newDueAmount: order.dueAmount.toFixed(2),
       exchangeReason: order.exchangeReason,
       updatedOrder: order,
+    },
+  });
+});
+
+// PATCH /api/orders/:id/returns/:returnId/approve — approve a return request
+export const approveReturn = asyncHandler(async (req, res, next) => {
+  const { returnId } = req.params;
+  const order = await Order.findById(req.params.id);
+  if (!order) return next(new Error("Order not found!", { cause: 404 }));
+
+  const returnItem = (order.returnedProducts || []).find(
+    (rp) => rp._id.toString() === returnId
+  );
+  if (!returnItem) {
+    return next(new Error("Return request not found", { cause: 404 }));
+  }
+
+  if (returnItem.status !== "pending") {
+    return next(new Error("Return request has already been processed", { cause: 400 }));
+  }
+
+  // Restore stock for the returned items
+  if (order.depositConfirmed) {
+    const originalProduct = order.products.find(
+      (p) => p._id && p._id.toString() === returnItem.originalLineItemId.toString()
+    );
+    if (originalProduct && originalProduct.color) {
+      await Product.findOneAndUpdate(
+        { _id: originalProduct.productId, "colorStock.color": originalProduct.color },
+        { $inc: { "colorStock.$.stock": returnItem.quantity } }
+      );
+    } else if (originalProduct) {
+      await Product.findOneAndUpdate(
+        { _id: originalProduct.productId, "colorStock.0": { $exists: true } },
+        { $inc: { "colorStock.0.stock": returnItem.quantity } }
+      );
+    }
+  }
+
+  // Update return status
+  returnItem.status = "approved";
+  returnItem.approvedDate = new Date();
+
+  // Update order-level refund status if all returns are approved
+  const allApproved = order.returnedProducts.every((rp) => rp.status === "approved" || rp.status === "completed");
+  if (allApproved) {
+    order.refundStatus = "pending";
+  }
+
+  await order.save();
+
+  res.json({
+    success: true,
+    message: "Return request approved successfully",
+    data: {
+      orderId: order._id,
+      returnId: returnItem._id,
+      status: returnItem.status,
+      approvedDate: returnItem.approvedDate,
+    },
+  });
+});
+
+// PATCH /api/orders/:id/returns/:returnId/reject — reject a return request
+export const rejectReturn = asyncHandler(async (req, res, next) => {
+  const { returnId } = req.params;
+  const { rejectionReason } = req.body;
+  
+  const order = await Order.findById(req.params.id);
+  if (!order) return next(new Error("Order not found!", { cause: 404 }));
+
+  const returnItem = (order.returnedProducts || []).find(
+    (rp) => rp._id.toString() === returnId
+  );
+  if (!returnItem) {
+    return next(new Error("Return request not found", { cause: 404 }));
+  }
+
+  if (returnItem.status !== "pending") {
+    return next(new Error("Return request has already been processed", { cause: 400 }));
+  }
+
+  // Update return status
+  returnItem.status = "rejected";
+  returnItem.rejectionReason = rejectionReason || "Return request rejected";
+
+  await order.save();
+
+  res.json({
+    success: true,
+    message: "Return request rejected successfully",
+    data: {
+      orderId: order._id,
+      returnId: returnItem._id,
+      status: returnItem.status,
+      rejectionReason: returnItem.rejectionReason,
+    },
+  });
+});
+
+// PATCH /api/orders/:id/returns/:returnId/complete — mark a return as completed (refund processed)
+export const completeReturn = asyncHandler(async (req, res, next) => {
+  const { returnId } = req.params;
+  const order = await Order.findById(req.params.id);
+  if (!order) return next(new Error("Order not found!", { cause: 404 }));
+
+  const returnItem = (order.returnedProducts || []).find(
+    (rp) => rp._id.toString() === returnId
+  );
+  if (!returnItem) {
+    return next(new Error("Return request not found", { cause: 404 }));
+  }
+
+  if (returnItem.status !== "approved") {
+    return next(new Error("Return request must be approved before completion", { cause: 400 }));
+  }
+
+  // Update return status
+  returnItem.status = "completed";
+  returnItem.completedDate = new Date();
+
+  // Update order-level refund status
+  order.refundStatus = "processed";
+  order.refundDate = new Date();
+
+  await order.save();
+
+  res.json({
+    success: true,
+    message: "Return completed successfully",
+    data: {
+      orderId: order._id,
+      returnId: returnItem._id,
+      status: returnItem.status,
+      completedDate: returnItem.completedDate,
+      refundStatus: order.refundStatus,
+      refundDate: order.refundDate,
+    },
+  });
+});
+
+// PATCH /api/orders/:id/exchanges/:exchangeId/approve — approve an exchange request
+export const approveExchange = asyncHandler(async (req, res, next) => {
+  const { exchangeId } = req.params;
+  const order = await Order.findById(req.params.id);
+  if (!order) return next(new Error("Order not found!", { cause: 404 }));
+
+  const exchangeItem = (order.exchangedProducts || []).find(
+    (ep) => ep._id.toString() === exchangeId
+  );
+  if (!exchangeItem) {
+    return next(new Error("Exchange request not found", { cause: 404 }));
+  }
+
+  if (exchangeItem.status !== "pending") {
+    return next(new Error("Exchange request has already been processed", { cause: 400 }));
+  }
+
+  // Update exchange status
+  exchangeItem.status = "approved";
+  exchangeItem.approvedDate = new Date();
+
+  await order.save();
+
+  res.json({
+    success: true,
+    message: "Exchange request approved successfully",
+    data: {
+      orderId: order._id,
+      exchangeId: exchangeItem._id,
+      status: exchangeItem.status,
+      approvedDate: exchangeItem.approvedDate,
+    },
+  });
+});
+
+// PATCH /api/orders/:id/exchanges/:exchangeId/reject — reject an exchange request
+export const rejectExchange = asyncHandler(async (req, res, next) => {
+  const { exchangeId } = req.params;
+  const { rejectionReason } = req.body;
+  
+  const order = await Order.findById(req.params.id);
+  if (!order) return next(new Error("Order not found!", { cause: 404 }));
+
+  const exchangeItem = (order.exchangedProducts || []).find(
+    (ep) => ep._id.toString() === exchangeId
+  );
+  if (!exchangeItem) {
+    return next(new Error("Exchange request not found", { cause: 404 }));
+  }
+
+  if (exchangeItem.status !== "pending") {
+    return next(new Error("Exchange request has already been processed", { cause: 400 }));
+  }
+
+  // Update exchange status
+  exchangeItem.status = "rejected";
+  exchangeItem.rejectionReason = rejectionReason || "Exchange request rejected";
+
+  await order.save();
+
+  res.json({
+    success: true,
+    message: "Exchange request rejected successfully",
+    data: {
+      orderId: order._id,
+      exchangeId: exchangeItem._id,
+      status: exchangeItem.status,
+      rejectionReason: exchangeItem.rejectionReason,
+    },
+  });
+});
+
+// PATCH /api/orders/:id/exchanges/:exchangeId/complete — mark an exchange as completed
+export const completeExchange = asyncHandler(async (req, res, next) => {
+  const { exchangeId } = req.params;
+  const order = await Order.findById(req.params.id);
+  if (!order) return next(new Error("Order not found!", { cause: 404 }));
+
+  const exchangeItem = (order.exchangedProducts || []).find(
+    (ep) => ep._id.toString() === exchangeId
+  );
+  if (!exchangeItem) {
+    return next(new Error("Exchange request not found", { cause: 404 }));
+  }
+
+  if (exchangeItem.status !== "approved") {
+    return next(new Error("Exchange request must be approved before completion", { cause: 400 }));
+  }
+
+  // Update exchange status
+  exchangeItem.status = "completed";
+  exchangeItem.completedDate = new Date();
+
+  await order.save();
+
+  res.json({
+    success: true,
+    message: "Exchange completed successfully",
+    data: {
+      orderId: order._id,
+      exchangeId: exchangeItem._id,
+      status: exchangeItem.status,
+      completedDate: exchangeItem.completedDate,
     },
   });
 });
