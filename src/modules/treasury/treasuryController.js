@@ -93,8 +93,16 @@ export const updateFinance = asyncHandler(async (req, res, next) => {
     );
   }
 
+  // Always get or create the current treasury record to ensure we have availableCash
+  if (!treasury) {
+    treasury = await Treasury.findOne({ date: { $gte: startOfDay } });
+    if (!treasury) {
+      treasury = await Treasury.create({ date: startOfDay });
+    }
+  }
+
   // Calculate total inventory value
-  const products = await Product.find({ visible: { $ne: false } });
+  const products = await Product.find({});
   let totalInventoryValue = 0;
   products.forEach((product) => {
     const stock = product.stock || 0;
@@ -103,7 +111,7 @@ export const updateFinance = asyncHandler(async (req, res, next) => {
   });
 
   // Calculate capital as inventory + available cash
-  const calculatedCapital = totalInventoryValue + (treasury?.availableCash || 0);
+  const calculatedCapital = totalInventoryValue + (treasury.availableCash || 0);
 
   // Update finance settings with calculated capital
   const settings = await FinanceService.updateSettings({
@@ -112,10 +120,8 @@ export const updateFinance = asyncHandler(async (req, res, next) => {
   });
 
   // Also update treasury with calculated capital
-  if (treasury) {
-    treasury.capitalMoney = calculatedCapital;
-    await treasury.save();
-  }
+  treasury.capitalMoney = calculatedCapital;
+  await treasury.save();
 
   res.json({
     success: true,

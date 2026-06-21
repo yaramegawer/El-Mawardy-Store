@@ -117,7 +117,7 @@ class TreasuryService {
    * Calculate total inventory value from products (stock * buyPrice)
    */
   static async calculateTotalInventoryValue() {
-    const products = await Product.find({ visible: { $ne: false } });
+    const products = await Product.find({});
     let totalInventoryValue = 0;
 
     products.forEach((product) => {
