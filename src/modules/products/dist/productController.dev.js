@@ -141,9 +141,7 @@ var allProducts = (0, _asyncHandler.asyncHandler)(function _callee2(req, res, ne
           // Fetch paginated products
 
           _context2.next = 14;
-          return regeneratorRuntime.awrap(_productModel.Product.find(filter).sort({
-            _id: -1
-          }).skip(skip).limit(limit));
+          return regeneratorRuntime.awrap(_productModel.Product.find(filter).skip(skip).limit(limit));
 
         case 14:
           products = _context2.sent;

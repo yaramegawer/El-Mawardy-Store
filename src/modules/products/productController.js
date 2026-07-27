@@ -67,7 +67,7 @@ export const allProducts=asyncHandler(async(req,res,next)=>{
     const totalPages = Math.ceil(totalProducts / limit); // Calculate total pages
 
     // Fetch paginated products
-    const products = await Product.find(filter)    .sort({ _id: -1 }) .skip(skip).limit(limit);
+    const products = await Product.find(filter).skip(skip).limit(limit);
 
 
     return res.json({
