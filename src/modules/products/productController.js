@@ -67,7 +67,7 @@ export const allProducts=asyncHandler(async(req,res,next)=>{
     const totalPages = Math.ceil(totalProducts / limit); // Calculate total pages
 
     // Fetch paginated products
-    const products = await Product.find(filter).skip(skip).limit(limit);
+    const products = await Product.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit);
 
 
     return res.json({
@@ -82,6 +82,32 @@ export const allProducts=asyncHandler(async(req,res,next)=>{
         }
     });
 });
+
+const searchProducts = async (req, res) => {
+  try {
+    const { q } = req.query;
+
+    if (!q || !q.trim()) {
+      return res.status(200).json([]);
+    }
+
+    const search = q.trim();
+
+    const products = await Product.find({
+      visible: true,
+      $or: [
+        { code: { $regex: search, $options: "i" } },
+        { name: { $regex: search, $options: "i" } }      ]
+    }).sort({ createdAt: -1 });
+
+    res.status(200).json(products);
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
 
 export const getProductById=asyncHandler(async(req,res,next)=>{
     let query = { _id: req.params.id };

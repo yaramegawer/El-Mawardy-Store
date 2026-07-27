@@ -141,7 +141,9 @@ var allProducts = (0, _asyncHandler.asyncHandler)(function _callee2(req, res, ne
           // Fetch paginated products
 
           _context2.next = 14;
-          return regeneratorRuntime.awrap(_productModel.Product.find(filter).skip(skip).limit(limit));
+          return regeneratorRuntime.awrap(_productModel.Product.find(filter).sort({
+            createdAt: -1
+          }).skip(skip).limit(limit));
 
         case 14:
           products = _context2.sent;
@@ -165,11 +167,70 @@ var allProducts = (0, _asyncHandler.asyncHandler)(function _callee2(req, res, ne
   });
 });
 exports.allProducts = allProducts;
-var getProductById = (0, _asyncHandler.asyncHandler)(function _callee3(req, res, next) {
-  var query, product;
-  return regeneratorRuntime.async(function _callee3$(_context3) {
+
+var searchProducts = function searchProducts(req, res) {
+  var q, search, products;
+  return regeneratorRuntime.async(function searchProducts$(_context3) {
     while (1) {
       switch (_context3.prev = _context3.next) {
+        case 0:
+          _context3.prev = 0;
+          q = req.query.q;
+
+          if (!(!q || !q.trim())) {
+            _context3.next = 4;
+            break;
+          }
+
+          return _context3.abrupt("return", res.status(200).json([]));
+
+        case 4:
+          search = q.trim();
+          _context3.next = 7;
+          return regeneratorRuntime.awrap(_productModel.Product.find({
+            visible: true,
+            $or: [{
+              code: {
+                $regex: search,
+                $options: "i"
+              }
+            }, {
+              name: {
+                $regex: search,
+                $options: "i"
+              }
+            }]
+          }).sort({
+            createdAt: -1
+          }));
+
+        case 7:
+          products = _context3.sent;
+          res.status(200).json(products);
+          _context3.next = 14;
+          break;
+
+        case 11:
+          _context3.prev = 11;
+          _context3.t0 = _context3["catch"](0);
+          res.status(500).json({
+            success: false,
+            message: _context3.t0.message
+          });
+
+        case 14:
+        case "end":
+          return _context3.stop();
+      }
+    }
+  }, null, null, [[0, 11]]);
+};
+
+var getProductById = (0, _asyncHandler.asyncHandler)(function _callee3(req, res, next) {
+  var query, product;
+  return regeneratorRuntime.async(function _callee3$(_context4) {
+    while (1) {
+      switch (_context4.prev = _context4.next) {
         case 0:
           query = {
             _id: req.params.id
@@ -181,49 +242,14 @@ var getProductById = (0, _asyncHandler.asyncHandler)(function _callee3(req, res,
             };
           }
 
-          _context3.next = 4;
+          _context4.next = 4;
           return regeneratorRuntime.awrap(_productModel.Product.findOne(query));
 
         case 4:
-          product = _context3.sent;
-
-          if (product) {
-            _context3.next = 7;
-            break;
-          }
-
-          return _context3.abrupt("return", next(new Error("Product not found", {
-            cause: 404
-          })));
-
-        case 7:
-          return _context3.abrupt("return", res.json({
-            success: true,
-            product: product
-          }));
-
-        case 8:
-        case "end":
-          return _context3.stop();
-      }
-    }
-  });
-});
-exports.getProductById = getProductById;
-var deleteProduct = (0, _asyncHandler.asyncHandler)(function _callee4(req, res, next) {
-  var product, ids;
-  return regeneratorRuntime.async(function _callee4$(_context4) {
-    while (1) {
-      switch (_context4.prev = _context4.next) {
-        case 0:
-          _context4.next = 2;
-          return regeneratorRuntime.awrap(_productModel.Product.findById(req.params.id));
-
-        case 2:
           product = _context4.sent;
 
           if (product) {
-            _context4.next = 5;
+            _context4.next = 7;
             break;
           }
 
@@ -231,8 +257,43 @@ var deleteProduct = (0, _asyncHandler.asyncHandler)(function _callee4(req, res, 
             cause: 404
           })));
 
+        case 7:
+          return _context4.abrupt("return", res.json({
+            success: true,
+            product: product
+          }));
+
+        case 8:
+        case "end":
+          return _context4.stop();
+      }
+    }
+  });
+});
+exports.getProductById = getProductById;
+var deleteProduct = (0, _asyncHandler.asyncHandler)(function _callee4(req, res, next) {
+  var product, ids;
+  return regeneratorRuntime.async(function _callee4$(_context5) {
+    while (1) {
+      switch (_context5.prev = _context5.next) {
+        case 0:
+          _context5.next = 2;
+          return regeneratorRuntime.awrap(_productModel.Product.findById(req.params.id));
+
+        case 2:
+          product = _context5.sent;
+
+          if (product) {
+            _context5.next = 5;
+            break;
+          }
+
+          return _context5.abrupt("return", next(new Error("Product not found", {
+            cause: 404
+          })));
+
         case 5:
-          _context4.next = 7;
+          _context5.next = 7;
           return regeneratorRuntime.awrap(product.deleteOne());
 
         case 7:
@@ -241,22 +302,22 @@ var deleteProduct = (0, _asyncHandler.asyncHandler)(function _callee4(req, res, 
             return image.id;
           });
           ids.push(product.defaultImage.id);
-          _context4.next = 11;
+          _context5.next = 11;
           return regeneratorRuntime.awrap(_cloudinary["default"].api.delete_resources(ids));
 
         case 11:
-          _context4.next = 13;
+          _context5.next = 13;
           return regeneratorRuntime.awrap(_cloudinary["default"].api.delete_folder("".concat(process.env.CLOUD_FOLDER_NAME, "/products/").concat(product.cloudFolder)));
 
         case 13:
-          return _context4.abrupt("return", res.json({
+          return _context5.abrupt("return", res.json({
             success: true,
             message: "product deleted successfully!"
           }));
 
         case 14:
         case "end":
-          return _context4.stop();
+          return _context5.stop();
       }
     }
   });
@@ -265,27 +326,27 @@ exports.deleteProduct = deleteProduct;
 var updateProduct = (0, _asyncHandler.asyncHandler)(function _callee5(req, res, next) {
   var _req$body, name, price, discount, buyPrice, description, colorStock, category, season, size, visible, product, discountAmount, updatedProduct;
 
-  return regeneratorRuntime.async(function _callee5$(_context5) {
+  return regeneratorRuntime.async(function _callee5$(_context6) {
     while (1) {
-      switch (_context5.prev = _context5.next) {
+      switch (_context6.prev = _context6.next) {
         case 0:
           _req$body = req.body, name = _req$body.name, price = _req$body.price, discount = _req$body.discount, buyPrice = _req$body.buyPrice, description = _req$body.description, colorStock = _req$body.colorStock, category = _req$body.category, season = _req$body.season, size = _req$body.size, visible = _req$body.visible; // Check if the product exists
 
-          _context5.next = 3;
+          _context6.next = 3;
           return regeneratorRuntime.awrap(_productModel.Product.findById(req.params.id));
 
         case 3:
-          product = _context5.sent;
+          product = _context6.sent;
 
           if (product) {
-            _context5.next = 7;
+            _context6.next = 7;
             break;
           }
 
           next(new Error("Product not found", {
             cause: 404
           }));
-          return _context5.abrupt("return");
+          return _context6.abrupt("return");
 
         case 7:
           //apply discount if provided
@@ -294,7 +355,7 @@ var updateProduct = (0, _asyncHandler.asyncHandler)(function _callee5(req, res, 
             price = price - discountAmount;
           }
 
-          _context5.next = 10;
+          _context6.next = 10;
           return regeneratorRuntime.awrap(_productModel.Product.findByIdAndUpdate(req.params.id, {
             name: name,
             price: price,
@@ -311,8 +372,8 @@ var updateProduct = (0, _asyncHandler.asyncHandler)(function _callee5(req, res, 
           }));
 
         case 10:
-          updatedProduct = _context5.sent;
-          return _context5.abrupt("return", res.json({
+          updatedProduct = _context6.sent;
+          return _context6.abrupt("return", res.json({
             success: true,
             message: "Product updated successfully!",
             product: updatedProduct
@@ -320,7 +381,7 @@ var updateProduct = (0, _asyncHandler.asyncHandler)(function _callee5(req, res, 
 
         case 12:
         case "end":
-          return _context5.stop();
+          return _context6.stop();
       }
     }
   });
@@ -328,32 +389,32 @@ var updateProduct = (0, _asyncHandler.asyncHandler)(function _callee5(req, res, 
 exports.updateProduct = updateProduct;
 var updateProductImages = (0, _asyncHandler.asyncHandler)(function _callee6(req, res, next) {
   var product, cloudFolderStr, updatedImages, oldImageIds, defaultResult, subImageUploads, subImageResults, subImagesArray;
-  return regeneratorRuntime.async(function _callee6$(_context6) {
+  return regeneratorRuntime.async(function _callee6$(_context7) {
     while (1) {
-      switch (_context6.prev = _context6.next) {
+      switch (_context7.prev = _context7.next) {
         case 0:
-          _context6.next = 2;
+          _context7.next = 2;
           return regeneratorRuntime.awrap(_productModel.Product.findById(req.params.id));
 
         case 2:
-          product = _context6.sent;
+          product = _context7.sent;
 
           if (product) {
-            _context6.next = 5;
+            _context7.next = 5;
             break;
           }
 
-          return _context6.abrupt("return", next(new Error("Product not found", {
+          return _context7.abrupt("return", next(new Error("Product not found", {
             cause: 404
           })));
 
         case 5:
           if (req.files) {
-            _context6.next = 7;
+            _context7.next = 7;
             break;
           }
 
-          return _context6.abrupt("return", next(new Error("No images provided", {
+          return _context7.abrupt("return", next(new Error("No images provided", {
             cause: 400
           })));
 
@@ -363,20 +424,20 @@ var updateProductImages = (0, _asyncHandler.asyncHandler)(function _callee6(req,
           oldImageIds = []; // Handle default image update
 
           if (!(req.files.defaultImage && req.files.defaultImage.length > 0)) {
-            _context6.next = 16;
+            _context7.next = 16;
             break;
           }
 
           // Delete old default image from Cloudinary
           oldImageIds.push(product.defaultImage.id); // Upload new default image
 
-          _context6.next = 14;
+          _context7.next = 14;
           return regeneratorRuntime.awrap(_cloudinary["default"].uploader.upload(req.files.defaultImage[0].path, {
             folder: cloudFolderStr
           }));
 
         case 14:
-          defaultResult = _context6.sent;
+          defaultResult = _context7.sent;
           product.defaultImage = {
             url: defaultResult.secure_url,
             id: defaultResult.public_id
@@ -384,7 +445,7 @@ var updateProductImages = (0, _asyncHandler.asyncHandler)(function _callee6(req,
 
         case 16:
           if (!(req.files.subImage && req.files.subImage.length > 0)) {
-            _context6.next = 24;
+            _context7.next = 24;
             break;
           }
 
@@ -398,11 +459,11 @@ var updateProductImages = (0, _asyncHandler.asyncHandler)(function _callee6(req,
               folder: cloudFolderStr
             });
           });
-          _context6.next = 21;
+          _context7.next = 21;
           return regeneratorRuntime.awrap(Promise.all(subImageUploads));
 
         case 21:
-          subImageResults = _context6.sent;
+          subImageResults = _context7.sent;
           subImagesArray = subImageResults.map(function (res) {
             return {
               id: res.public_id,
@@ -413,19 +474,19 @@ var updateProductImages = (0, _asyncHandler.asyncHandler)(function _callee6(req,
 
         case 24:
           if (!(oldImageIds.length > 0)) {
-            _context6.next = 27;
+            _context7.next = 27;
             break;
           }
 
-          _context6.next = 27;
+          _context7.next = 27;
           return regeneratorRuntime.awrap(_cloudinary["default"].api.delete_resources(oldImageIds));
 
         case 27:
-          _context6.next = 29;
+          _context7.next = 29;
           return regeneratorRuntime.awrap(product.save());
 
         case 29:
-          return _context6.abrupt("return", res.json({
+          return _context7.abrupt("return", res.json({
             success: true,
             message: "Product images updated successfully!",
             product: product
@@ -433,7 +494,7 @@ var updateProductImages = (0, _asyncHandler.asyncHandler)(function _callee6(req,
 
         case 30:
         case "end":
-          return _context6.stop();
+          return _context7.stop();
       }
     }
   });
@@ -442,18 +503,18 @@ var updateProductImages = (0, _asyncHandler.asyncHandler)(function _callee6(req,
 exports.updateProductImages = updateProductImages;
 var searchByCode = (0, _asyncHandler.asyncHandler)(function _callee7(req, res, next) {
   var code, query, product;
-  return regeneratorRuntime.async(function _callee7$(_context7) {
+  return regeneratorRuntime.async(function _callee7$(_context8) {
     while (1) {
-      switch (_context7.prev = _context7.next) {
+      switch (_context8.prev = _context8.next) {
         case 0:
           code = req.query.code;
 
           if (code) {
-            _context7.next = 3;
+            _context8.next = 3;
             break;
           }
 
-          return _context7.abrupt("return", next(new Error("code is required", {
+          return _context8.abrupt("return", next(new Error("code is required", {
             cause: 400
           })));
 
@@ -468,30 +529,30 @@ var searchByCode = (0, _asyncHandler.asyncHandler)(function _callee7(req, res, n
             };
           }
 
-          _context7.next = 7;
+          _context8.next = 7;
           return regeneratorRuntime.awrap(_productModel.Product.findOne(query));
 
         case 7:
-          product = _context7.sent;
+          product = _context8.sent;
 
           if (product) {
-            _context7.next = 10;
+            _context8.next = 10;
             break;
           }
 
-          return _context7.abrupt("return", next(new Error("Product not found", {
+          return _context8.abrupt("return", next(new Error("Product not found", {
             cause: 404
           })));
 
         case 10:
-          return _context7.abrupt("return", res.json({
+          return _context8.abrupt("return", res.json({
             success: true,
             product: product
           }));
 
         case 11:
         case "end":
-          return _context7.stop();
+          return _context8.stop();
       }
     }
   });

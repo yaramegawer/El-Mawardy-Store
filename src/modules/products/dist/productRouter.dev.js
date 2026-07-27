@@ -21,21 +21,42 @@ var _validationMiddleware = require("../../middlewares/validationMiddleware.js")
 
 var _isAdmin = require("../../middlewares/isAdmin.js");
 
+var _qs = _interopRequireDefault(require("qs"));
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { "default": obj }; }
+
 function _getRequireWildcardCache() { if (typeof WeakMap !== "function") return null; var cache = new WeakMap(); _getRequireWildcardCache = function _getRequireWildcardCache() { return cache; }; return cache; }
 
 function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } if (obj === null || _typeof(obj) !== "object" && typeof obj !== "function") { return { "default": obj }; } var cache = _getRequireWildcardCache(); if (cache && cache.has(obj)) { return cache.get(obj); } var newObj = {}; var hasPropertyDescriptor = Object.defineProperty && Object.getOwnPropertyDescriptor; for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) { var desc = hasPropertyDescriptor ? Object.getOwnPropertyDescriptor(obj, key) : null; if (desc && (desc.get || desc.set)) { Object.defineProperty(newObj, key, desc); } else { newObj[key] = obj[key]; } } } newObj["default"] = obj; if (cache) { cache.set(obj, newObj); } return newObj; }
 
 var router = (0, _express.Router)();
+
+// Middleware to parse nested multipart form data arrays and objects using qs
+var parseFormData = function parseFormData(req, res, next) {
+  if (req.body) {
+    req.body = _qs["default"].parse(_qs["default"].stringify(req.body));
+  }
+
+  next();
+};
+
 router.post('/', (0, _fileUpload.fileUpload)().fields([{
   name: "defaultImage",
   maxCount: 1
 }, {
   name: "subImage"
-}]), (0, _validationMiddleware.validation)(productSchema.createProduct), productController.createProduct);
-router.get('/', productController.allProducts);
-router.get('/search', productController.searchByCode);
+}]), parseFormData, (0, _validationMiddleware.validation)(productSchema.createProduct), productController.createProduct);
+router.get('/', productController.allProducts); //router.get('/search',productController.searchByCode);
+
 router.get('/:id', productController.getProductById);
 router["delete"]('/:id', productController.deleteProduct);
+router.get("/search", productController.searchProducts);
 router.put('/:id', (0, _validationMiddleware.validation)(productSchema.updateProduct), productController.updateProduct);
+router.put('/:id/images', (0, _fileUpload.fileUpload)().fields([{
+  name: "defaultImage",
+  maxCount: 1
+}, {
+  name: "subImage"
+}]), (0, _validationMiddleware.validation)(productSchema.updateProductImages), productController.updateProductImages);
 var _default = router;
 exports["default"] = _default;
