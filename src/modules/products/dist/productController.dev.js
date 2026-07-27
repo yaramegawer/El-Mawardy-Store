@@ -3,7 +3,7 @@
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.searchByCode = exports.updateProduct = exports.deleteProduct = exports.getProductById = exports.allProducts = exports.createProduct = void 0;
+exports.searchByCode = exports.updateProductImages = exports.updateProduct = exports.deleteProduct = exports.getProductById = exports.allProducts = exports.createProduct = void 0;
 
 var _asyncHandler = require("../../utils/asyncHandler.js");
 
@@ -116,6 +116,13 @@ var allProducts = (0, _asyncHandler.asyncHandler)(function _callee2(req, res, ne
 
           if (req.query.season) {
             filter.season = req.query.season;
+          } // Only filter by visibility if NOT admin request
+
+
+          if (req.query.admin !== 'true') {
+            filter.visible = {
+              $ne: false
+            };
           }
 
           page = page < 1 ? 1 : page; // Prevent negative or zero pages
@@ -124,19 +131,21 @@ var allProducts = (0, _asyncHandler.asyncHandler)(function _callee2(req, res, ne
 
           skip = (page - 1) * limit; // Calculate how many products to skip
 
-          _context2.next = 9;
+          _context2.next = 10;
           return regeneratorRuntime.awrap(_productModel.Product.countDocuments(filter));
 
-        case 9:
+        case 10:
           totalProducts = _context2.sent;
           // Get total count of products
           totalPages = Math.ceil(totalProducts / limit); // Calculate total pages
           // Fetch paginated products
 
-          _context2.next = 13;
-          return regeneratorRuntime.awrap(_productModel.Product.find(filter).skip(skip).limit(limit));
+          _context2.next = 14;
+          return regeneratorRuntime.awrap(_productModel.Product.find(filter).sort({
+            _id: -1
+          }).skip(skip).limit(limit));
 
-        case 13:
+        case 14:
           products = _context2.sent;
           return _context2.abrupt("return", res.json({
             success: true,
@@ -150,7 +159,7 @@ var allProducts = (0, _asyncHandler.asyncHandler)(function _callee2(req, res, ne
             }
           }));
 
-        case 15:
+        case 16:
         case "end":
           return _context2.stop();
       }
@@ -159,19 +168,29 @@ var allProducts = (0, _asyncHandler.asyncHandler)(function _callee2(req, res, ne
 });
 exports.allProducts = allProducts;
 var getProductById = (0, _asyncHandler.asyncHandler)(function _callee3(req, res, next) {
-  var product;
+  var query, product;
   return regeneratorRuntime.async(function _callee3$(_context3) {
     while (1) {
       switch (_context3.prev = _context3.next) {
         case 0:
-          _context3.next = 2;
-          return regeneratorRuntime.awrap(_productModel.Product.findById(req.params.id));
+          query = {
+            _id: req.params.id
+          }; // Only filter by visibility if NOT admin request
 
-        case 2:
+          if (req.query.admin !== 'true') {
+            query.visible = {
+              $ne: false
+            };
+          }
+
+          _context3.next = 4;
+          return regeneratorRuntime.awrap(_productModel.Product.findOne(query));
+
+        case 4:
           product = _context3.sent;
 
           if (product) {
-            _context3.next = 5;
+            _context3.next = 7;
             break;
           }
 
@@ -179,13 +198,13 @@ var getProductById = (0, _asyncHandler.asyncHandler)(function _callee3(req, res,
             cause: 404
           })));
 
-        case 5:
+        case 7:
           return _context3.abrupt("return", res.json({
             success: true,
             product: product
           }));
 
-        case 6:
+        case 8:
         case "end":
           return _context3.stop();
       }
@@ -246,13 +265,13 @@ var deleteProduct = (0, _asyncHandler.asyncHandler)(function _callee4(req, res, 
 });
 exports.deleteProduct = deleteProduct;
 var updateProduct = (0, _asyncHandler.asyncHandler)(function _callee5(req, res, next) {
-  var _req$body, name, price, discount, buyPrice, description, stock, category, season, color, size, product, discountAmount, updatedProduct;
+  var _req$body, name, price, discount, buyPrice, description, colorStock, category, season, size, visible, product, discountAmount, updatedProduct;
 
   return regeneratorRuntime.async(function _callee5$(_context5) {
     while (1) {
       switch (_context5.prev = _context5.next) {
         case 0:
-          _req$body = req.body, name = _req$body.name, price = _req$body.price, discount = _req$body.discount, buyPrice = _req$body.buyPrice, description = _req$body.description, stock = _req$body.stock, category = _req$body.category, season = _req$body.season, color = _req$body.color, size = _req$body.size; // Check if the product exists
+          _req$body = req.body, name = _req$body.name, price = _req$body.price, discount = _req$body.discount, buyPrice = _req$body.buyPrice, description = _req$body.description, colorStock = _req$body.colorStock, category = _req$body.category, season = _req$body.season, size = _req$body.size, visible = _req$body.visible; // Check if the product exists
 
           _context5.next = 3;
           return regeneratorRuntime.awrap(_productModel.Product.findById(req.params.id));
@@ -271,7 +290,7 @@ var updateProduct = (0, _asyncHandler.asyncHandler)(function _callee5(req, res, 
           return _context5.abrupt("return");
 
         case 7:
-          //qpply discount if provided
+          //apply discount if provided
           if (discount) {
             discountAmount = price * req.body.discount / 100;
             price = price - discountAmount;
@@ -283,12 +302,12 @@ var updateProduct = (0, _asyncHandler.asyncHandler)(function _callee5(req, res, 
             price: price,
             buyPrice: buyPrice,
             description: description,
-            stock: stock,
+            colorStock: colorStock,
             category: category,
             season: season,
-            color: color,
             size: size,
-            discount: discount
+            discount: discount,
+            visible: visible
           }, {
             "new": true
           }));
@@ -307,37 +326,22 @@ var updateProduct = (0, _asyncHandler.asyncHandler)(function _callee5(req, res, 
       }
     }
   });
-}); //search by code
-
+});
 exports.updateProduct = updateProduct;
-var searchByCode = (0, _asyncHandler.asyncHandler)(function _callee6(req, res, next) {
-  var code, product;
+var updateProductImages = (0, _asyncHandler.asyncHandler)(function _callee6(req, res, next) {
+  var product, cloudFolderStr, updatedImages, oldImageIds, defaultResult, subImageUploads, subImageResults, subImagesArray;
   return regeneratorRuntime.async(function _callee6$(_context6) {
     while (1) {
       switch (_context6.prev = _context6.next) {
         case 0:
-          code = req.query.code;
+          _context6.next = 2;
+          return regeneratorRuntime.awrap(_productModel.Product.findById(req.params.id));
 
-          if (code) {
-            _context6.next = 3;
-            break;
-          }
-
-          return _context6.abrupt("return", next(new Error("code is required", {
-            cause: 400
-          })));
-
-        case 3:
-          _context6.next = 5;
-          return regeneratorRuntime.awrap(_productModel.Product.findOne({
-            code: code
-          }));
-
-        case 5:
+        case 2:
           product = _context6.sent;
 
           if (product) {
-            _context6.next = 8;
+            _context6.next = 5;
             break;
           }
 
@@ -345,15 +349,151 @@ var searchByCode = (0, _asyncHandler.asyncHandler)(function _callee6(req, res, n
             cause: 404
           })));
 
-        case 8:
+        case 5:
+          if (req.files) {
+            _context6.next = 7;
+            break;
+          }
+
+          return _context6.abrupt("return", next(new Error("No images provided", {
+            cause: 400
+          })));
+
+        case 7:
+          cloudFolderStr = "".concat(process.env.CLOUD_FOLDER_NAME, "/products/").concat(product.cloudFolder);
+          updatedImages = [];
+          oldImageIds = []; // Handle default image update
+
+          if (!(req.files.defaultImage && req.files.defaultImage.length > 0)) {
+            _context6.next = 16;
+            break;
+          }
+
+          // Delete old default image from Cloudinary
+          oldImageIds.push(product.defaultImage.id); // Upload new default image
+
+          _context6.next = 14;
+          return regeneratorRuntime.awrap(_cloudinary["default"].uploader.upload(req.files.defaultImage[0].path, {
+            folder: cloudFolderStr
+          }));
+
+        case 14:
+          defaultResult = _context6.sent;
+          product.defaultImage = {
+            url: defaultResult.secure_url,
+            id: defaultResult.public_id
+          };
+
+        case 16:
+          if (!(req.files.subImage && req.files.subImage.length > 0)) {
+            _context6.next = 24;
+            break;
+          }
+
+          // Delete old additional images from Cloudinary
+          product.images.forEach(function (image) {
+            oldImageIds.push(image.id);
+          }); // Upload new additional images
+
+          subImageUploads = req.files.subImage.map(function (file) {
+            return _cloudinary["default"].uploader.upload(file.path, {
+              folder: cloudFolderStr
+            });
+          });
+          _context6.next = 21;
+          return regeneratorRuntime.awrap(Promise.all(subImageUploads));
+
+        case 21:
+          subImageResults = _context6.sent;
+          subImagesArray = subImageResults.map(function (res) {
+            return {
+              id: res.public_id,
+              url: res.secure_url
+            };
+          });
+          product.images = subImagesArray;
+
+        case 24:
+          if (!(oldImageIds.length > 0)) {
+            _context6.next = 27;
+            break;
+          }
+
+          _context6.next = 27;
+          return regeneratorRuntime.awrap(_cloudinary["default"].api.delete_resources(oldImageIds));
+
+        case 27:
+          _context6.next = 29;
+          return regeneratorRuntime.awrap(product.save());
+
+        case 29:
           return _context6.abrupt("return", res.json({
+            success: true,
+            message: "Product images updated successfully!",
+            product: product
+          }));
+
+        case 30:
+        case "end":
+          return _context6.stop();
+      }
+    }
+  });
+}); //search by code
+
+exports.updateProductImages = updateProductImages;
+var searchByCode = (0, _asyncHandler.asyncHandler)(function _callee7(req, res, next) {
+  var code, query, product;
+  return regeneratorRuntime.async(function _callee7$(_context7) {
+    while (1) {
+      switch (_context7.prev = _context7.next) {
+        case 0:
+          code = req.query.code;
+
+          if (code) {
+            _context7.next = 3;
+            break;
+          }
+
+          return _context7.abrupt("return", next(new Error("code is required", {
+            cause: 400
+          })));
+
+        case 3:
+          query = {
+            code: code
+          }; // Only filter by visibility if NOT admin request
+
+          if (req.query.admin !== 'true') {
+            query.visible = {
+              $ne: false
+            };
+          }
+
+          _context7.next = 7;
+          return regeneratorRuntime.awrap(_productModel.Product.findOne(query));
+
+        case 7:
+          product = _context7.sent;
+
+          if (product) {
+            _context7.next = 10;
+            break;
+          }
+
+          return _context7.abrupt("return", next(new Error("Product not found", {
+            cause: 404
+          })));
+
+        case 10:
+          return _context7.abrupt("return", res.json({
             success: true,
             product: product
           }));
 
-        case 9:
+        case 11:
         case "end":
-          return _context6.stop();
+          return _context7.stop();
       }
     }
   });
