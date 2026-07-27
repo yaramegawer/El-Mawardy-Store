@@ -83,8 +83,8 @@ export const allProducts=asyncHandler(async(req,res,next)=>{
     });
 });
 
-export const searchProducts = async (req, res) => {
-  try {
+export const searchProducts = asyncHandler( async (req, res,next) => {
+
     const { q } = req.query;
 
     if (!q || !q.trim()) {
@@ -101,13 +101,9 @@ export const searchProducts = async (req, res) => {
     }).sort({ createdAt: -1 });
 
     res.status(200).json(products);
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message
-    });
-  }
-};
+ 
+  
+});
 
 export const getProductById=asyncHandler(async(req,res,next)=>{
     let query = { _id: req.params.id };
