@@ -24,6 +24,7 @@ router.post('/',fileUpload().fields([
 router.get('/',productController.allProducts);
 router.get("/search", productController.searchProducts);
 
+
 //router.get('/search',productController.searchByCode);
 router.get('/:id',productController.getProductById);
 
