@@ -232,18 +232,18 @@ export const updateProductImages = asyncHandler(async (req, res, next) => {
 });
 
 //search by code
-export const searchByCode=asyncHandler(async(req,res,next)=>{
-    const {code}=req.query;
-    if(!code) return next(new Error("code is required",{cause:400}));
-    let query = { code };
-    // Only filter by visibility if NOT admin request
-    if (req.query.admin !== 'true') {
-        query.visible = { $ne: false };
-    }
-    const product=await Product.findOne(query);
-    if(!product) return next(new Error("Product not found",{cause:404}));
-    return res.json({
-        success:true,
-        product
-    })
-});
+// export const searchByCode=asyncHandler(async(req,res,next)=>{
+//     const {code}=req.query;
+//     if(!code) return next(new Error("code is required",{cause:400}));
+//     let query = { code };
+//     // Only filter by visibility if NOT admin request
+//     if (req.query.admin !== 'true') {
+//         query.visible = { $ne: false };
+//     }
+//     const product=await Product.findOne(query);
+//     if(!product) return next(new Error("Product not found",{cause:404}));
+//     return res.json({
+//         success:true,
+//         product
+//     })
+// });

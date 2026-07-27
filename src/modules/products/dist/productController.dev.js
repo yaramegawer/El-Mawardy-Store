@@ -3,7 +3,7 @@
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.searchByCode = exports.updateProductImages = exports.updateProduct = exports.deleteProduct = exports.getProductById = exports.searchProducts = exports.allProducts = exports.createProduct = void 0;
+exports.updateProductImages = exports.updateProduct = exports.deleteProduct = exports.getProductById = exports.searchProducts = exports.allProducts = exports.createProduct = void 0;
 
 var _asyncHandler = require("../../utils/asyncHandler.js");
 
@@ -486,62 +486,20 @@ var updateProductImages = (0, _asyncHandler.asyncHandler)(function _callee7(req,
     }
   });
 }); //search by code
+// export const searchByCode=asyncHandler(async(req,res,next)=>{
+//     const {code}=req.query;
+//     if(!code) return next(new Error("code is required",{cause:400}));
+//     let query = { code };
+//     // Only filter by visibility if NOT admin request
+//     if (req.query.admin !== 'true') {
+//         query.visible = { $ne: false };
+//     }
+//     const product=await Product.findOne(query);
+//     if(!product) return next(new Error("Product not found",{cause:404}));
+//     return res.json({
+//         success:true,
+//         product
+//     })
+// });
 
 exports.updateProductImages = updateProductImages;
-var searchByCode = (0, _asyncHandler.asyncHandler)(function _callee8(req, res, next) {
-  var code, query, product;
-  return regeneratorRuntime.async(function _callee8$(_context8) {
-    while (1) {
-      switch (_context8.prev = _context8.next) {
-        case 0:
-          code = req.query.code;
-
-          if (code) {
-            _context8.next = 3;
-            break;
-          }
-
-          return _context8.abrupt("return", next(new Error("code is required", {
-            cause: 400
-          })));
-
-        case 3:
-          query = {
-            code: code
-          }; // Only filter by visibility if NOT admin request
-
-          if (req.query.admin !== 'true') {
-            query.visible = {
-              $ne: false
-            };
-          }
-
-          _context8.next = 7;
-          return regeneratorRuntime.awrap(_productModel.Product.findOne(query));
-
-        case 7:
-          product = _context8.sent;
-
-          if (product) {
-            _context8.next = 10;
-            break;
-          }
-
-          return _context8.abrupt("return", next(new Error("Product not found", {
-            cause: 404
-          })));
-
-        case 10:
-          return _context8.abrupt("return", res.json({
-            success: true,
-            product: product
-          }));
-
-        case 11:
-        case "end":
-          return _context8.stop();
-      }
-    }
-  });
-});
-exports.searchByCode = searchByCode;
