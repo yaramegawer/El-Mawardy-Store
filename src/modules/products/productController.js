@@ -225,4 +225,3 @@ export const searchByCode=asyncHandler(async(req,res,next)=>{
         product
     })
 });
-
