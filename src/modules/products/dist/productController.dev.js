@@ -3,7 +3,7 @@
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.searchByCode = exports.updateProductImages = exports.updateProduct = exports.deleteProduct = exports.getProductById = exports.allProducts = exports.createProduct = void 0;
+exports.searchByCode = exports.updateProductImages = exports.updateProduct = exports.deleteProduct = exports.getProductById = exports.searchProducts = exports.allProducts = exports.createProduct = void 0;
 
 var _asyncHandler = require("../../utils/asyncHandler.js");
 
@@ -226,6 +226,7 @@ var searchProducts = function searchProducts(req, res) {
   }, null, null, [[0, 11]]);
 };
 
+exports.searchProducts = searchProducts;
 var getProductById = (0, _asyncHandler.asyncHandler)(function _callee3(req, res, next) {
   var query, product;
   return regeneratorRuntime.async(function _callee3$(_context4) {

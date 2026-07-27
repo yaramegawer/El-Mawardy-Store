@@ -83,7 +83,7 @@ export const allProducts=asyncHandler(async(req,res,next)=>{
     });
 });
 
-const searchProducts = async (req, res) => {
+export const searchProducts = async (req, res) => {
   try {
     const { q } = req.query;
 
