@@ -43,7 +43,6 @@ export const createProduct = asyncHandler(async (req, res, next) => {
 });
 
 export const allProducts=asyncHandler(async(req,res,next)=>{
-   console.log("✅ allProducts called");
     let page = parseInt(req.query.page) || 1; // Ensure page is a valid number
     //fiter by category and season
     let filter = {};
@@ -68,17 +67,8 @@ export const allProducts=asyncHandler(async(req,res,next)=>{
     const totalPages = Math.ceil(totalProducts / limit); // Calculate total pages
 
     // Fetch paginated products
-    // const products = await Product.find(filter).skip(skip).limit(limit);
-const products = await Product.find(filter);
+    const products = await Product.find(filter).skip(skip).limit(limit);
 
-console.log(products.length);
-
-console.log(
-  products.map(p => ({
-    code: p.code,
-    visible: p.visible
-  }))
-);
 
     return res.json({
         success: true,

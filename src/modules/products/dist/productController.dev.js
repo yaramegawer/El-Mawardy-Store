@@ -105,7 +105,6 @@ var allProducts = (0, _asyncHandler.asyncHandler)(function _callee2(req, res, ne
     while (1) {
       switch (_context2.prev = _context2.next) {
         case 0:
-          console.log("✅ allProducts called");
           page = parseInt(req.query.page) || 1; // Ensure page is a valid number
           //fiter by category and season
 
@@ -132,28 +131,20 @@ var allProducts = (0, _asyncHandler.asyncHandler)(function _callee2(req, res, ne
 
           skip = (page - 1) * limit; // Calculate how many products to skip
 
-          _context2.next = 11;
+          _context2.next = 10;
           return regeneratorRuntime.awrap(_productModel.Product.countDocuments(filter));
 
-        case 11:
+        case 10:
           totalProducts = _context2.sent;
           // Get total count of products
           totalPages = Math.ceil(totalProducts / limit); // Calculate total pages
           // Fetch paginated products
-          // const products = await Product.find(filter).skip(skip).limit(limit);
 
-          _context2.next = 15;
-          return regeneratorRuntime.awrap(_productModel.Product.find(filter));
+          _context2.next = 14;
+          return regeneratorRuntime.awrap(_productModel.Product.find(filter).skip(skip).limit(limit));
 
-        case 15:
+        case 14:
           products = _context2.sent;
-          console.log(products.length);
-          console.log(products.map(function (p) {
-            return {
-              code: p.code,
-              visible: p.visible
-            };
-          }));
           return _context2.abrupt("return", res.json({
             success: true,
             products: products,
@@ -166,7 +157,7 @@ var allProducts = (0, _asyncHandler.asyncHandler)(function _callee2(req, res, ne
             }
           }));
 
-        case 19:
+        case 16:
         case "end":
           return _context2.stop();
       }
