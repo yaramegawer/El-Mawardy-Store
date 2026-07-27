@@ -22,13 +22,13 @@ router.post('/',fileUpload().fields([
 ]),parseFormData,validation(productSchema.createProduct),productController.createProduct);
 
 router.get('/',productController.allProducts);
+router.get("/search", productController.searchProducts);
 
 //router.get('/search',productController.searchByCode);
 router.get('/:id',productController.getProductById);
 
 router.delete('/:id',productController.deleteProduct)
 
-router.get("/search", productController.searchProducts);
 router.put('/:id',validation(productSchema.updateProduct),productController.updateProduct);
 
 router.put('/:id/images',fileUpload().fields([
