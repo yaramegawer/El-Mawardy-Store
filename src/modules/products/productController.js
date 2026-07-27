@@ -43,6 +43,7 @@ export const createProduct = asyncHandler(async (req, res, next) => {
 });
 
 export const allProducts=asyncHandler(async(req,res,next)=>{
+   console.log("✅ allProducts called");
     let page = parseInt(req.query.page) || 1; // Ensure page is a valid number
     //fiter by category and season
     let filter = {};
