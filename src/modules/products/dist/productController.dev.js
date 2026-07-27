@@ -139,12 +139,20 @@ var allProducts = (0, _asyncHandler.asyncHandler)(function _callee2(req, res, ne
           // Get total count of products
           totalPages = Math.ceil(totalProducts / limit); // Calculate total pages
           // Fetch paginated products
+          // const products = await Product.find(filter).skip(skip).limit(limit);
 
           _context2.next = 14;
-          return regeneratorRuntime.awrap(_productModel.Product.find(filter).skip(skip).limit(limit));
+          return regeneratorRuntime.awrap(_productModel.Product.find(filter));
 
         case 14:
           products = _context2.sent;
+          console.log(products.length);
+          console.log(products.map(function (p) {
+            return {
+              code: p.code,
+              visible: p.visible
+            };
+          }));
           return _context2.abrupt("return", res.json({
             success: true,
             products: products,
@@ -157,7 +165,7 @@ var allProducts = (0, _asyncHandler.asyncHandler)(function _callee2(req, res, ne
             }
           }));
 
-        case 16:
+        case 18:
         case "end":
           return _context2.stop();
       }
