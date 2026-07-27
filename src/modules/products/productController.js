@@ -67,7 +67,7 @@ export const allProducts=asyncHandler(async(req,res,next)=>{
     const totalPages = Math.ceil(totalProducts / limit); // Calculate total pages
 
     // Fetch paginated products
-    const products = await Product.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit);
+    const products = await Product.find(filter).skip(skip).limit(limit);
 
 
     return res.json({
@@ -83,16 +83,6 @@ export const allProducts=asyncHandler(async(req,res,next)=>{
     });
 });
 
-export const searchProducts = asyncHandler( async (req, res,next) => {
-
-  return res.json({
-    success: true,
-    controller: "NEW SEARCH",
-    query: req.query,
-    time: new Date().toISOString(),
-  });
-  
-});
 
 export const getProductById=asyncHandler(async(req,res,next)=>{
     let query = { _id: req.params.id };
@@ -221,18 +211,18 @@ export const updateProductImages = asyncHandler(async (req, res, next) => {
 });
 
 //search by code
-// export const searchByCode=asyncHandler(async(req,res,next)=>{
-//     const {code}=req.query;
-//     if(!code) return next(new Error("code is required",{cause:400}));
-//     let query = { code };
-//     // Only filter by visibility if NOT admin request
-//     if (req.query.admin !== 'true') {
-//         query.visible = { $ne: false };
-//     }
-//     const product=await Product.findOne(query);
-//     if(!product) return next(new Error("Product not found",{cause:404}));
-//     return res.json({
-//         success:true,
-//         product
-//     })
-// });
+export const searchByCode=asyncHandler(async(req,res,next)=>{
+    const {code}=req.query;
+    if(!code) return next(new Error("code is required",{cause:400}));
+    let query = { code };
+    // Only filter by visibility if NOT admin request
+    if (req.query.admin !== 'true') {
+        query.visible = { $ne: false };
+    }
+    const product=await Product.findOne(query);
+    if(!product) return next(new Error("Product not found",{cause:404}));
+    return res.json({
+        success:true,
+        product
+    })
+});

@@ -47,8 +47,7 @@ router.post('/', (0, _fileUpload.fileUpload)().fields([{
   name: "subImage"
 }]), parseFormData, (0, _validationMiddleware.validation)(productSchema.createProduct), productController.createProduct);
 router.get('/', productController.allProducts);
-router.get("/search", productController.searchProducts); //router.get('/search',productController.searchByCode);
-
+router.get('/search', productController.searchByCode);
 router.get('/:id', productController.getProductById);
 router["delete"]('/:id', productController.deleteProduct);
 router.put('/:id', (0, _validationMiddleware.validation)(productSchema.updateProduct), productController.updateProduct);
