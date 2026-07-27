@@ -186,7 +186,6 @@ var searchProducts = (0, _asyncHandler.asyncHandler)(function _callee3(req, res,
           search = q.trim();
           _context3.next = 6;
           return regeneratorRuntime.awrap(_productModel.Product.find({
-            visible: true,
             $or: [{
               code: {
                 $regex: search,

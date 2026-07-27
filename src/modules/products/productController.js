@@ -94,7 +94,7 @@ export const searchProducts = asyncHandler( async (req, res,next) => {
     const search = q.trim();
 
     const products = await Product.find({
-      visible: true,
+
       $or: [
         { code: { $regex: search, $options: "i" } },
         { name: { $regex: search, $options: "i" } }      ]
