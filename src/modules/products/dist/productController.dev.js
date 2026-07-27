@@ -168,44 +168,18 @@ var allProducts = (0, _asyncHandler.asyncHandler)(function _callee2(req, res, ne
 });
 exports.allProducts = allProducts;
 var searchProducts = (0, _asyncHandler.asyncHandler)(function _callee3(req, res, next) {
-  var q, search, products;
   return regeneratorRuntime.async(function _callee3$(_context3) {
     while (1) {
       switch (_context3.prev = _context3.next) {
         case 0:
-          q = req.query.q;
-
-          if (!(!q || !q.trim())) {
-            _context3.next = 3;
-            break;
-          }
-
-          return _context3.abrupt("return", res.status(200).json([]));
-
-        case 3:
-          search = q.trim();
-          _context3.next = 6;
-          return regeneratorRuntime.awrap(_productModel.Product.find({
-            $or: [{
-              code: {
-                $regex: search,
-                $options: "i"
-              }
-            }, {
-              name: {
-                $regex: search,
-                $options: "i"
-              }
-            }]
-          }).sort({
-            createdAt: -1
+          return _context3.abrupt("return", res.json({
+            success: true,
+            controller: "NEW SEARCH",
+            query: req.query,
+            time: new Date().toISOString()
           }));
 
-        case 6:
-          products = _context3.sent;
-          res.status(200).json(products);
-
-        case 8:
+        case 1:
         case "end":
           return _context3.stop();
       }

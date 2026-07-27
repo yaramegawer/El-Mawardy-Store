@@ -85,23 +85,12 @@ export const allProducts=asyncHandler(async(req,res,next)=>{
 
 export const searchProducts = asyncHandler( async (req, res,next) => {
 
-    const { q } = req.query;
-
-    if (!q || !q.trim()) {
-      return res.status(200).json([]);
-    }
-
-    const search = q.trim();
-
-    const products = await Product.find({
-
-      $or: [
-        { code: { $regex: search, $options: "i" } },
-        { name: { $regex: search, $options: "i" } }      ]
-    }).sort({ createdAt: -1 });
-
-    res.status(200).json(products);
- 
+  return res.json({
+    success: true,
+    controller: "NEW SEARCH",
+    query: req.query,
+    time: new Date().toISOString(),
+  });
   
 });
 
