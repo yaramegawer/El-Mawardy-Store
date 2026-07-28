@@ -66,8 +66,12 @@ export const allProducts=asyncHandler(async(req,res,next)=>{
     const totalProducts = await Product.countDocuments(filter); // Get total count of products
     const totalPages = Math.ceil(totalProducts / limit); // Calculate total pages
 
-    // Fetch paginated products
-  const products = await Product.find(filter).sort({ createdAt: -1, _id: 1 }).skip(skip).limit(limit);
+    // Stable sort required: many products share the same createdAt (bulk import),
+    // so _id must be a tiebreaker or skip/limit pagination returns duplicates.
+    const products = await Product.find(filter)
+        .sort({ createdAt: -1, _id: -1 })
+        .skip(skip)
+        .limit(limit);
 
 
 

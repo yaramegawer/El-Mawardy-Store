@@ -77,4 +77,7 @@ productSchema.virtual('color').get(function () {
 productSchema.set('toJSON', { virtuals: true });
 productSchema.set('toObject', { virtuals: true });
 
+// Supports stable paginated product listing (createdAt + _id tiebreaker)
+productSchema.index({ createdAt: -1, _id: -1 });
+
 export const Product=model('Product',productSchema);
